@@ -18,7 +18,7 @@ func RegisterExt(id int8, value interface{}) interface{} {
 }
 
 func Open(path string, mode os.FileMode, options *bolt.Options) (*DB, error) {
-	db, err := bolt.Open("cache.db", 0600, nil)
+	db, err := bolt.Open(path, 0600, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -87,8 +87,16 @@ func (tx *Tx) Bucket(name string) *Bucket {
 
 var ErrNoSuchObject = errors.New("No such object.")
 
-func ErrIsNoSuchObject(err error) bool {
+func IsNoSuchObject(err error) bool {
 	return err == ErrNoSuchObject
+}
+
+func (b *Bucket) DeleteBucket(key string) error {
+	return b.InnerBucket.DeleteBucket([]byte(key))
+}
+
+func (b *Bucket) Delete(key string) error {
+	return b.InnerBucket.Delete([]byte(key))
 }
 
 func (b *Bucket) Get(key string, v ...interface{}) error {

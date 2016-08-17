@@ -76,6 +76,14 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/minio/cli",
+			"repository": "https://github.com/minio/cli",
+			"vcs": "git",
+			"revision": "bdbedfec41be8134e62bd090890b77ccd408e354",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/minio/minio-go",
 			"repository": "https://github.com/minio/minio-go",
 			"vcs": "git",

@@ -64,6 +64,7 @@ func New(options ...func(*Config)) (*MinFS, error) {
 	cfg := &Config{
 		cacheSize: 10000000,
 		cache:     "./cache/",
+		accountID: fmt.Sprintf("%d", time.Now().UTC().Unix()),
 		gid:       0,
 		uid:       0,
 		mode:      os.FileMode(0660),
@@ -81,6 +82,35 @@ func New(options ...func(*Config)) (*MinFS, error) {
 		config: cfg,
 	}
 	return fs, nil
+}
+
+func (mfs *MinFS) stopNotificationListener() error {
+	// try to set and listen for notifications
+	// Fetch the bucket location.
+	location, err := mfs.api.GetBucketLocation(mfs.config.bucket)
+	if err != nil {
+		return err
+	}
+
+	// Fetch any existing bucket notification on the bucket.
+	bn, err := mfs.api.GetBucketNotification(mfs.config.bucket)
+	if err != nil {
+		return err
+	}
+
+	accountARN := minio.NewArn("minio", "sns", location, mfs.config.accountID, "listen")
+
+	// Remove account ARN if any.
+	bn.RemoveTopicByArn(accountARN)
+
+	// Set back the new sets of notifications.
+	err = mfs.api.SetBucketNotification(mfs.config.bucket, bn)
+	if err != nil {
+		return err
+	}
+
+	// Success.
+	return nil
 }
 
 func (mfs *MinFS) startNotificationListener() error {
@@ -306,11 +336,12 @@ loop:
 				log.Fatal(err)
 			}
 		case s := <-signalCh:
-			if s == syscall.SIGUSR1 {
+			if s == os.Interrupt {
+				return mfs.stopNotificationListener()
+			} else if s == syscall.SIGUSR1 {
 				fmt.Println("PRINT STATS")
 				continue
 			}
-
 			break loop
 		}
 	}

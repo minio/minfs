@@ -36,7 +36,6 @@ import (
 
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
-	_ "bazil.org/fuse/fs/fstestutil"
 	"golang.org/x/net/context"
 )
 
@@ -65,6 +64,7 @@ func New(options ...func(*Config)) (*MinFS, error) {
 	cfg := &Config{
 		cacheSize: 10000000,
 		cache:     "./cache/",
+		accountID: fmt.Sprintf("%d", time.Now().UTC().Unix()),
 		gid:       0,
 		uid:       0,
 		mode:      os.FileMode(0660),
@@ -82,6 +82,35 @@ func New(options ...func(*Config)) (*MinFS, error) {
 		config: cfg,
 	}
 	return fs, nil
+}
+
+func (mfs *MinFS) stopNotificationListener() error {
+	// try to set and listen for notifications
+	// Fetch the bucket location.
+	location, err := mfs.api.GetBucketLocation(mfs.config.bucket)
+	if err != nil {
+		return err
+	}
+
+	// Fetch any existing bucket notification on the bucket.
+	bn, err := mfs.api.GetBucketNotification(mfs.config.bucket)
+	if err != nil {
+		return err
+	}
+
+	accountARN := minio.NewArn("minio", "sns", location, mfs.config.accountID, "listen")
+
+	// Remove account ARN if any.
+	bn.RemoveTopicByArn(accountARN)
+
+	// Set back the new sets of notifications.
+	err = mfs.api.SetBucketNotification(mfs.config.bucket, bn)
+	if err != nil {
+		return err
+	}
+
+	// Success.
+	return nil
 }
 
 func (mfs *MinFS) startNotificationListener() error {
@@ -143,12 +172,11 @@ func (mfs *MinFS) startNotificationListener() error {
 			// todo(nl5887): defer not called in for each
 			// todo(nl5887): how to ignore my own created events?
 			// can we use eventsource?
-			return
 
 			for _, record := range notificationInfo.Records {
 				key, e := url.QueryUnescape(record.S3.Object.Key)
 				if e != nil {
-					fmt.Println("Error: %s", err.Error())
+					fmt.Print("Error:", err)
 					continue
 				}
 
@@ -159,7 +187,7 @@ func (mfs *MinFS) startNotificationListener() error {
 				b := tx.Bucket("minio")
 
 				if v, err := b.CreateBucketIfNotExists(dir); err != nil {
-					fmt.Println("Error: %s", err.Error())
+					fmt.Print("Error:", err)
 					continue
 				} else {
 					b = v
@@ -168,18 +196,18 @@ func (mfs *MinFS) startNotificationListener() error {
 				var f interface{}
 				if err := b.Get(key, &f); err == nil {
 				} else if !meta.IsNoSuchObject(err) {
-					fmt.Println("Error: %s", err.Error())
+					fmt.Println("Error:", err)
 					continue
 				} else if i, err := mfs.NextSequence(tx); err != nil {
-					fmt.Println("Error: %s", err.Error())
+					fmt.Println("Error:", err)
 					continue
 				} else {
 					oi := record.S3.Object
 					f = File{
 						Size:  uint64(oi.Size),
 						Inode: i,
-						Uid:   mfs.config.uid,
-						Gid:   mfs.config.gid,
+						UID:   mfs.config.uid,
+						GID:   mfs.config.gid,
 						Mode:  mfs.config.mode,
 						/*
 							objectMeta doesn't contain those fields
@@ -194,7 +222,7 @@ func (mfs *MinFS) startNotificationListener() error {
 					}
 
 					if err := f.(*File).store(tx); err != nil {
-						fmt.Println("Error: %s", err.Error())
+						fmt.Println("Error:", err)
 						continue
 					}
 				}
@@ -308,11 +336,12 @@ loop:
 				log.Fatal(err)
 			}
 		case s := <-signalCh:
-			if s == syscall.SIGUSR1 {
+			if s == os.Interrupt {
+				return mfs.stopNotificationListener()
+			} else if s == syscall.SIGUSR1 {
 				fmt.Println("PRINT STATS")
 				continue
 			}
-
 			break loop
 		}
 	}
@@ -371,8 +400,8 @@ type Dir struct {
 	Atime time.Time
 	Mtime time.Time
 
-	Uid uint32
-	Gid uint32
+	UID uint32
+	GID uint32
 
 	// OS X only
 	Bkuptime time.Time
@@ -395,8 +424,8 @@ func (dir *Dir) Attr(ctx context.Context, a *fuse.Attr) error {
 		Ctime:  dir.Chgtime,
 		Crtime: dir.Crtime,
 		Mode:   dir.Mode,
-		Uid:    dir.Uid,
-		Gid:    dir.Gid,
+		Uid:    dir.UID,
+		Gid:    dir.GID,
 		Flags:  dir.Flags,
 	}
 
@@ -471,8 +500,8 @@ func (mfs *MinFS) scan(p string) error {
 					Inode: i,
 
 					Mode: 0770 | os.ModeDir,
-					Gid:  mfs.config.gid,
-					Uid:  mfs.config.uid,
+					GID:  mfs.config.gid,
+					UID:  mfs.config.uid,
 
 					Chgtime: message.LastModified,
 					Crtime:  message.LastModified,
@@ -497,8 +526,8 @@ func (mfs *MinFS) scan(p string) error {
 					Size:    uint64(message.Size),
 					Inode:   i,
 					Mode:    mfs.config.mode,
-					Gid:     mfs.config.gid,
-					Uid:     mfs.config.uid,
+					GID:     mfs.config.gid,
+					UID:     mfs.config.uid,
 					Chgtime: message.LastModified,
 					Crtime:  message.LastModified,
 					Mtime:   message.LastModified,
@@ -570,8 +599,8 @@ type File struct {
 	Atime time.Time
 	Mtime time.Time
 
-	Uid uint32
-	Gid uint32
+	UID uint32
+	GID uint32
 
 	// OS X only
 	Bkuptime time.Time
@@ -626,8 +655,8 @@ func (file *File) Attr(ctx context.Context, a *fuse.Attr) error {
 		Ctime:  file.Chgtime,
 		Crtime: file.Crtime,
 		Mode:   file.Mode,
-		Uid:    file.Uid,
-		Gid:    file.Gid,
+		Uid:    file.UID,
+		Gid:    file.GID,
 		Flags:  file.Flags,
 	}
 
@@ -679,11 +708,11 @@ func (f *File) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse
 	}
 
 	if req.Valid.Uid() {
-		f.Uid = req.Uid
+		f.UID = req.Uid
 	}
 
 	if req.Valid.Gid() {
-		f.Gid = req.Gid
+		f.GID = req.Gid
 	}
 
 	if req.Valid.Size() {
@@ -949,8 +978,8 @@ func (file *File) Getattr(ctx context.Context, req *fuse.GetattrRequest, resp *f
 		Ctime:  file.Chgtime,
 		Crtime: file.Crtime,
 		Mode:   file.Mode,
-		Uid:    file.Uid,
-		Gid:    file.Gid,
+		Uid:    file.UID,
+		Gid:    file.GID,
 		Flags:  file.Flags,
 	}
 
@@ -999,12 +1028,12 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 			Inode:   i,
 			Path:    path.Join(dir.Path, req.Name),
 			Mode:    req.Mode, // dir.mfs.config.mode, // should we use same mode for scan?
-			Gid:     dir.mfs.config.gid,
-			Uid:     dir.mfs.config.uid,
-			Chgtime: time.Now(),
-			Crtime:  time.Now(),
-			Mtime:   time.Now(),
-			Atime:   time.Now(),
+			UID:     dir.mfs.config.uid,
+			GID:     dir.mfs.config.gid,
+			Chgtime: time.Now().UTC(),
+			Crtime:  time.Now().UTC(),
+			Mtime:   time.Now().UTC(),
+			Atime:   time.Now().UTC(),
 			ETag:    "",
 
 			// req.Umask

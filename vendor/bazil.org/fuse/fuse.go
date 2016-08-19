@@ -858,7 +858,6 @@ loop:
 	case opFsync, opFsyncdir:
 		in := (*fsyncIn)(m.data())
 		if m.len() < unsafe.Sizeof(*in) {
-			panic("CORRUPT")
 			goto corrupt
 		}
 		req = &FsyncRequest{

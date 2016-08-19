@@ -52,11 +52,6 @@ type consoleScreenBufferInfo struct {
 	maximumWindowSize coord
 }
 
-type consoleCursorInfo struct {
-	size    dword
-	visible int32
-}
-
 var (
 	kernel32                       = syscall.NewLazyDLL("kernel32.dll")
 	procGetConsoleScreenBufferInfo = kernel32.NewProc("GetConsoleScreenBufferInfo")
@@ -64,8 +59,6 @@ var (
 	procSetConsoleCursorPosition   = kernel32.NewProc("SetConsoleCursorPosition")
 	procFillConsoleOutputCharacter = kernel32.NewProc("FillConsoleOutputCharacterW")
 	procFillConsoleOutputAttribute = kernel32.NewProc("FillConsoleOutputAttribute")
-	procGetConsoleCursorInfo       = kernel32.NewProc("GetConsoleCursorInfo")
-	procSetConsoleCursorInfo       = kernel32.NewProc("SetConsoleCursorInfo")
 )
 
 type Writer struct {
@@ -75,27 +68,26 @@ type Writer struct {
 	oldattr word
 }
 
-func NewColorable(file *os.File) io.Writer {
-	if file == nil {
-		panic("nil passed instead of *os.File to NewColorable()")
-	}
-
-	if isatty.IsTerminal(file.Fd()) {
-		var csbi consoleScreenBufferInfo
-		handle := syscall.Handle(file.Fd())
-		procGetConsoleScreenBufferInfo.Call(uintptr(handle), uintptr(unsafe.Pointer(&csbi)))
-		return &Writer{out: file, handle: handle, oldattr: csbi.attributes}
-	} else {
-		return file
-	}
-}
-
 func NewColorableStdout() io.Writer {
-	return NewColorable(os.Stdout)
+	var csbi consoleScreenBufferInfo
+	out := os.Stdout
+	if !isatty.IsTerminal(out.Fd()) {
+		return out
+	}
+	handle := syscall.Handle(out.Fd())
+	procGetConsoleScreenBufferInfo.Call(uintptr(handle), uintptr(unsafe.Pointer(&csbi)))
+	return &Writer{out: out, handle: handle, oldattr: csbi.attributes}
 }
 
 func NewColorableStderr() io.Writer {
-	return NewColorable(os.Stderr)
+	var csbi consoleScreenBufferInfo
+	out := os.Stderr
+	if !isatty.IsTerminal(out.Fd()) {
+		return out
+	}
+	handle := syscall.Handle(out.Fd())
+	procGetConsoleScreenBufferInfo.Call(uintptr(handle), uintptr(unsafe.Pointer(&csbi)))
+	return &Writer{out: out, handle: handle, oldattr: csbi.attributes}
 }
 
 var color256 = map[int]int{
@@ -466,7 +458,7 @@ loop:
 				continue
 			}
 			procGetConsoleScreenBufferInfo.Call(uintptr(w.handle), uintptr(unsafe.Pointer(&csbi)))
-			csbi.cursorPosition.x = short(n-1)
+			csbi.cursorPosition.x = short(n)
 			procSetConsoleCursorPosition.Call(uintptr(w.handle), *(*uintptr)(unsafe.Pointer(&csbi.cursorPosition)))
 		case 'H':
 			token := strings.Split(buf.String(), ";")
@@ -481,15 +473,14 @@ loop:
 			if err != nil {
 				continue
 			}
-			csbi.cursorPosition.x = short(n2-1)
-			csbi.cursorPosition.y = short(n1-1)
+			csbi.cursorPosition.x = short(n2)
+			csbi.cursorPosition.x = short(n1)
 			procSetConsoleCursorPosition.Call(uintptr(w.handle), *(*uintptr)(unsafe.Pointer(&csbi.cursorPosition)))
 		case 'J':
 			n, err := strconv.Atoi(buf.String())
 			if err != nil {
 				continue
 			}
-			procGetConsoleScreenBufferInfo.Call(uintptr(w.handle), uintptr(unsafe.Pointer(&csbi)))
 			var cursor coord
 			switch n {
 			case 0:
@@ -508,7 +499,6 @@ loop:
 			if err != nil {
 				continue
 			}
-			procGetConsoleScreenBufferInfo.Call(uintptr(w.handle), uintptr(unsafe.Pointer(&csbi)))
 			var cursor coord
 			switch n {
 			case 0:
@@ -523,7 +513,6 @@ loop:
 			procFillConsoleOutputCharacter.Call(uintptr(w.handle), uintptr(' '), uintptr(count), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&written)))
 			procFillConsoleOutputAttribute.Call(uintptr(w.handle), uintptr(csbi.attributes), uintptr(count), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&written)))
 		case 'm':
-			procGetConsoleScreenBufferInfo.Call(uintptr(w.handle), uintptr(unsafe.Pointer(&csbi)))
 			attr := csbi.attributes
 			cs := buf.String()
 			if cs == "" {
@@ -531,7 +520,7 @@ loop:
 				continue
 			}
 			token := strings.Split(cs, ";")
-			for i := 0; i < len(token); i++ {
+			for i := 0; i < len(token); i += 1 {
 				ns := token[i]
 				if n, err = strconv.Atoi(ns); err == nil {
 					switch {
@@ -546,7 +535,7 @@ loop:
 					case n == 27:
 						attr = ((attr & foregroundMask) << 4) | ((attr & backgroundMask) >> 4)
 					case 30 <= n && n <= 37:
-						attr &= backgroundMask
+						attr = (attr & backgroundMask)
 						if (n-30)&1 != 0 {
 							attr |= foregroundRed
 						}
@@ -573,7 +562,7 @@ loop:
 						attr &= backgroundMask
 						attr |= w.oldattr & foregroundMask
 					case 40 <= n && n <= 47:
-						attr &= foregroundMask
+						attr = (attr & foregroundMask)
 						if (n-40)&1 != 0 {
 							attr |= backgroundRed
 						}
@@ -626,22 +615,6 @@ loop:
 					}
 					procSetConsoleTextAttribute.Call(uintptr(w.handle), uintptr(attr))
 				}
-			}
-		case 'h':
-			cs := buf.String()
-			if cs == "?25" {
-				var ci consoleCursorInfo
-				procGetConsoleCursorInfo.Call(uintptr(w.handle), uintptr(unsafe.Pointer(&ci)))
-				ci.visible = 1
-				procSetConsoleCursorInfo.Call(uintptr(w.handle), uintptr(unsafe.Pointer(&ci)))
-			}
-		case 'l':
-			cs := buf.String()
-			if cs == "?25" {
-				var ci consoleCursorInfo
-				procGetConsoleCursorInfo.Call(uintptr(w.handle), uintptr(unsafe.Pointer(&ci)))
-				ci.visible = 0
-				procSetConsoleCursorInfo.Call(uintptr(w.handle), uintptr(unsafe.Pointer(&ci)))
 			}
 		}
 	}

@@ -1,0 +1,161 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "AP+4+IcVArsZumhjeAHQJ60VL6U=",
+			"path": "bazil.org/fuse",
+			"revision": "371fbbdaa8987b715bdd21d6adc4c9b20155f748",
+			"revisionTime": "2016-08-11T21:22:31Z"
+		},
+		{
+			"checksumSHA1": "389JFJTJADMtZkTIfdSnsmHVOUs=",
+			"path": "bazil.org/fuse/fs",
+			"revision": "371fbbdaa8987b715bdd21d6adc4c9b20155f748",
+			"revisionTime": "2016-08-11T21:22:31Z"
+		},
+		{
+			"checksumSHA1": "NPgkh9UWMsaTtsAAs3kPrclHT9Y=",
+			"path": "bazil.org/fuse/fuseutil",
+			"revision": "371fbbdaa8987b715bdd21d6adc4c9b20155f748",
+			"revisionTime": "2016-08-11T21:22:31Z"
+		},
+		{
+			"checksumSHA1": "DLcP1TBsvOvfOIwUagfE1dOdPG4=",
+			"path": "github.com/boltdb/bolt",
+			"revision": "583e8937c61f1af6513608ccc75c97b6abdf4ff9",
+			"revisionTime": "2016-08-18T17:01:52Z"
+		},
+		{
+			"checksumSHA1": "U3c1xAnpa/oQtfsCx4lLEX5vDbs=",
+			"origin": "github.com/minio/mc/vendor/github.com/fatih/color",
+			"path": "github.com/fatih/color",
+			"revision": "90a421e4af75d0d0fbc99af01cb37cc44cb5b000",
+			"revisionTime": "2016-08-18T07:41:28Z"
+		},
+		{
+			"checksumSHA1": "XnbEHQRzINRKXKmu9GcaqGkK4Lg=",
+			"path": "github.com/golang/protobuf/proto",
+			"revision": "f592bd283e9ef86337a432eb50e592278c3d534d",
+			"revisionTime": "2016-08-17T17:41:13Z"
+		},
+		{
+			"checksumSHA1": "7x2UfEAwyq5ouD4/noloWuIR/YI=",
+			"origin": "github.com/minio/mc/vendor/github.com/mattn/go-colorable",
+			"path": "github.com/mattn/go-colorable",
+			"revision": "90a421e4af75d0d0fbc99af01cb37cc44cb5b000",
+			"revisionTime": "2016-08-18T07:41:28Z"
+		},
+		{
+			"checksumSHA1": "NkbetqlpWBi3gP08JDneC+axTKw=",
+			"origin": "github.com/minio/mc/vendor/github.com/mattn/go-isatty",
+			"path": "github.com/mattn/go-isatty",
+			"revision": "90a421e4af75d0d0fbc99af01cb37cc44cb5b000",
+			"revisionTime": "2016-08-18T07:41:28Z"
+		},
+		{
+			"checksumSHA1": "CgMkKCG6mu3N6n7GxWhyCWYMQWI=",
+			"path": "github.com/minio/mc/pkg/console",
+			"revision": "90a421e4af75d0d0fbc99af01cb37cc44cb5b000",
+			"revisionTime": "2016-08-18T07:41:28Z"
+		},
+		{
+			"checksumSHA1": "xk/h/ltr8Er0d0tEFcwLjKUReBE=",
+			"path": "github.com/minio/minio-go",
+			"revision": "9e734013294ab153b0bdbe182738bcddd46f1947",
+			"revisionTime": "2016-08-18T00:31:20Z"
+		},
+		{
+			"checksumSHA1": "0OZaeJPgMlA2Txn+1yeAIwEpJvM=",
+			"path": "github.com/minio/minio-go/pkg/policy",
+			"revision": "9e734013294ab153b0bdbe182738bcddd46f1947",
+			"revisionTime": "2016-08-18T00:31:20Z"
+		},
+		{
+			"checksumSHA1": "A8QOw1aWwc+RtjGozY0XeS5varo=",
+			"path": "github.com/minio/minio-go/pkg/set",
+			"revision": "9e734013294ab153b0bdbe182738bcddd46f1947",
+			"revisionTime": "2016-08-18T00:31:20Z"
+		},
+		{
+			"checksumSHA1": "9jjO5GjLa0XF/nfWihF02RoH4qc=",
+			"path": "golang.org/x/net/context",
+			"revision": "07b51741c1d6423d4a6abab1c49940ec09cb1aaf",
+			"revisionTime": "2016-08-11T10:50:59Z"
+		},
+		{
+			"checksumSHA1": "8fD/im5Kwvy3JgmxulDTambmE8w=",
+			"origin": "github.com/minio/mc/vendor/golang.org/x/sys/unix",
+			"path": "golang.org/x/sys/unix",
+			"revision": "a646d33e2ee3172a661fc09bca23bb4889a41bc8",
+			"revisionTime": "2016-07-15T05:43:45Z"
+		},
+		{
+			"checksumSHA1": "xduDNbu9zEufcDc8UNWHoLrip5w=",
+			"path": "google.golang.org/appengine",
+			"revision": "e951d3868b377b14f4e60efa3a301532ee3c1ebf",
+			"revisionTime": "2016-08-10T20:11:16Z"
+		},
+		{
+			"checksumSHA1": "xgGorJmc1WJ08UgG9bmm+qqljuw=",
+			"path": "google.golang.org/appengine/datastore",
+			"revision": "e951d3868b377b14f4e60efa3a301532ee3c1ebf",
+			"revisionTime": "2016-08-10T20:11:16Z"
+		},
+		{
+			"checksumSHA1": "4lEP/dEWOMb4r2Aehu0D9iBDgIU=",
+			"path": "google.golang.org/appengine/internal",
+			"revision": "e951d3868b377b14f4e60efa3a301532ee3c1ebf",
+			"revisionTime": "2016-08-10T20:11:16Z"
+		},
+		{
+			"checksumSHA1": "x6Thdfyasqd68dWZWqzWWeIfAfI=",
+			"path": "google.golang.org/appengine/internal/app_identity",
+			"revision": "e951d3868b377b14f4e60efa3a301532ee3c1ebf",
+			"revisionTime": "2016-08-10T20:11:16Z"
+		},
+		{
+			"checksumSHA1": "TsNO8P0xUlLNyh3Ic/tzSp/fDWM=",
+			"path": "google.golang.org/appengine/internal/base",
+			"revision": "e951d3868b377b14f4e60efa3a301532ee3c1ebf",
+			"revisionTime": "2016-08-10T20:11:16Z"
+		},
+		{
+			"checksumSHA1": "5QsV5oLGSfKZqTCVXP6NRz5T4Tw=",
+			"path": "google.golang.org/appengine/internal/datastore",
+			"revision": "e951d3868b377b14f4e60efa3a301532ee3c1ebf",
+			"revisionTime": "2016-08-10T20:11:16Z"
+		},
+		{
+			"checksumSHA1": "Gep2T9zmVYV8qZfK2gu3zrmG6QE=",
+			"path": "google.golang.org/appengine/internal/log",
+			"revision": "e951d3868b377b14f4e60efa3a301532ee3c1ebf",
+			"revisionTime": "2016-08-10T20:11:16Z"
+		},
+		{
+			"checksumSHA1": "eLZVX1EHLclFtQnjDIszsdyWRHo=",
+			"path": "google.golang.org/appengine/internal/modules",
+			"revision": "e951d3868b377b14f4e60efa3a301532ee3c1ebf",
+			"revisionTime": "2016-08-10T20:11:16Z"
+		},
+		{
+			"checksumSHA1": "a1XY7rz3BieOVqVI2Et6rKiwQCk=",
+			"path": "google.golang.org/appengine/internal/remote_api",
+			"revision": "e951d3868b377b14f4e60efa3a301532ee3c1ebf",
+			"revisionTime": "2016-08-10T20:11:16Z"
+		},
+		{
+			"checksumSHA1": "AsTRiJ1HC8jSuu2R+r+/i01s6Cg=",
+			"path": "gopkg.in/vmihailenco/msgpack.v2",
+			"revision": "3e4e2bdfed29cc4ebf72d9b7523c7c91e9eb829e",
+			"revisionTime": "2016-07-21T09:31:39Z"
+		},
+		{
+			"checksumSHA1": "KqVHe5SB85yaDcseNq2CogozjRk=",
+			"path": "gopkg.in/vmihailenco/msgpack.v2/codes",
+			"revision": "3e4e2bdfed29cc4ebf72d9b7523c7c91e9eb829e",
+			"revisionTime": "2016-07-21T09:31:39Z"
+		}
+	],
+	"rootPath": "github.com/minio/minfs"
+}

@@ -74,24 +74,17 @@ func CacheSize(size uint64) func(*Config) {
 	}
 }
 
-// Bucket option for Config
+// Gid Bucket option for Config
 func Gid(gid uint32) func(*Config) {
 	return func(cfg *Config) {
 		cfg.gid = gid
 	}
 }
 
-// Bucket option for Config
+// Uid Bucket option for Config
 func Uid(uid uint32) func(*Config) {
 	return func(cfg *Config) {
 		cfg.uid = uid
-	}
-}
-
-// Bucket option for Config
-func AccountID(accountID string) func(*Config) {
-	return func(cfg *Config) {
-		cfg.accountID = accountID
 	}
 }
 

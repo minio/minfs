@@ -73,3 +73,5 @@ There is a long list of todos:
 * each mountpoint will have its own cache folders and can be mounted to one bucket
 * rename files
 * use minio configs? .minfs file for keys?
+* should we use a unique file handle for the file in cache? That way we can have multiple versions to be uploaded.
+* on first access, copy file to file+handle then upload file+handle

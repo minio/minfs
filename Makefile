@@ -15,7 +15,11 @@ getdeps: checks
 	@go get github.com/client9/misspell/cmd/misspell && echo "Installed misspell:"
 
 # verifiers: getdeps vet fmt lint cyclo deadcode
-verifiers: vet fmt lint cyclo deadcode spelling
+verifiers: vet fmt lint cyclo deadcode spelling todo
+
+todo:
+	@echo "Running $@:"
+	@$(foreach DIR, $(DIRS), fgrep -i todo $(DIR)||true;)
 
 vet:
 	@echo "Running $@:"

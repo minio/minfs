@@ -24,14 +24,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fatih/color"
+	"github.com/minio/mc/pkg/console"
 	minfs "github.com/minio/minfs/fs"
 )
 
 var options = flag.String("o", "", "mount options")
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "MinFS for cloud storage and filesystems.\n\n")
+	fmt.Fprintf(os.Stderr, "MinFS for cloud storage.\n\n")
 
 	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "  %s MOUNTPOINT\n", os.Args[0])
@@ -71,32 +71,26 @@ func Main() {
 
 	for _, option := range strings.Split(*options, ",") {
 		vals := strings.Split(option, "=")
-
 		switch vals[0] {
 		case "uid":
 			if len(vals) == 1 {
-				fmt.Fprint(os.Stderr, color.RedString("Uid has no value\n"))
-				os.Exit(2)
+				console.Fatalln("Uid has no value")
 			} else if val, err := strconv.Atoi(vals[1]); err != nil {
-				fmt.Fprint(os.Stderr, color.RedString("Uid is not a valid value: %s\n", vals[1]))
-				os.Exit(2)
+				console.Fatalf("Uid is not a valid value: %s\n", vals[1])
 			} else {
 				opts = append(opts, minfs.Uid(uint32(val)))
 			}
 		case "gid":
 			if len(vals) == 1 {
-				fmt.Fprint(os.Stderr, color.RedString("Uid has no value\n"))
-				os.Exit(2)
+				console.Fatalln("Uid has no value")
 			} else if val, err := strconv.Atoi(vals[1]); err != nil {
-				fmt.Fprint(os.Stderr, color.RedString("Gid is not a valid value: %s\n", vals[1]))
-				os.Exit(2)
+				console.Fatalf("Gid is not a valid value: %s\n", vals[1])
 			} else {
 				opts = append(opts, minfs.Gid(uint32(val)))
 			}
 		case "cache":
 			if len(vals) == 1 {
-				fmt.Fprint(os.Stderr, color.RedString("Cache has no value\n"))
-				os.Exit(2)
+				console.Fatalln("Cache has no value")
 			} else {
 				opts = append(opts, minfs.CacheDir(vals[1]))
 			}
@@ -106,15 +100,13 @@ func Main() {
 	target := flag.Arg(0)
 	mountpoint := flag.Arg(1)
 
-	if fs, err := minfs.New(
-		append(opts,
-			minfs.Mountpoint(mountpoint),
-			minfs.Target(target),
-			minfs.Debug(),
-		)...,
-	); err != nil {
-		panic(err)
-	} else if err := fs.Serve(); err != nil {
-		panic(err)
+	opts = append(opts, minfs.Mountpoint(mountpoint), minfs.Target(target), minfs.Debug())
+	fs, err := minfs.New(opts...)
+	if err != nil {
+		console.Fatalln("Unable to instantiate a new minfs", err)
+	}
+	err = fs.Serve()
+	if err != nil {
+		console.Fatalln("Unable to serve a minfs", err)
 	}
 }

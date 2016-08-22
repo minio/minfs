@@ -1,0 +1,7 @@
+cover.out
+./minfs
+*~
+*.test
+release
+experimental
+coverage.txt

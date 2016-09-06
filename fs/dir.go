@@ -1,7 +1,6 @@
 package minfs
 
 import (
-	"fmt"
 	"os"
 	"path"
 	"time"
@@ -59,6 +58,8 @@ func (dir *Dir) Attr(ctx context.Context, a *fuse.Attr) error {
 }
 
 // todo(nl5887): implement cancel
+// todo(nl5887): implement rename
+// todo(nl5887): implement mkdir
 // todo(nl5887): implement removed files
 // todo(nl5887): buckets in buckets in buckets? or just subbuckets in minio bucket?
 
@@ -120,8 +121,6 @@ func (dir *Dir) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 		return nil, err
 	}
 
-	fmt.Printf("%#v", entries)
-
 	return entries, nil
 }
 
@@ -130,15 +129,55 @@ func (dir *Dir) bucket(tx *meta.Tx) *meta.Bucket {
 	return b.Bucket(dir.Path)
 }
 
+func (dir *Dir) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, error) {
+	subdir := Dir{
+		mfs:  dir.mfs,
+		Path: req.Name,
+
+		Mode: 0770 | os.ModeDir,
+		GID:  dir.mfs.config.gid,
+		UID:  dir.mfs.config.uid,
+
+		Chgtime: time.Now(),
+		Crtime:  time.Now(),
+		Mtime:   time.Now(),
+		Atime:   time.Now(),
+	}
+
+	tx, err := dir.mfs.db.Begin(true)
+	if err != nil {
+		return nil, err
+	}
+
+	defer tx.Rollback()
+
+	// todo(nl5887): something is wrong with nested dirs. use all in minio bucket
+	// or subbuckets?
+	b := tx.Bucket("minio")
+	// b := dir.bucket(tx)
+	if err := b.Put(req.Name, &subdir); err != nil {
+		return nil, err
+	}
+
+	// Commit the transaction and check for error.
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return &subdir, nil
+}
+
 func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
+	if dir.mfs.IsLocked(req.Name) {
+		return fuse.EPERM
+	}
+
 	tx, err := dir.mfs.db.Begin(true)
 	if err != nil {
 		return err
 	}
 
 	defer tx.Rollback()
-
-	// stat object to see if it still exists on remote?
 
 	b := dir.bucket(tx)
 
@@ -149,8 +188,7 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 
 	if err := b.Delete(req.Name); err == nil {
 	} else if meta.IsNoSuchObject(err) {
-		// what error do we need to return if the object doesn't exist anymore?
-		return nil
+		return fuse.ENOENT
 	} else if err != nil {
 		return err
 	}
@@ -159,9 +197,8 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 		b.DeleteBucket(req.Name)
 	}
 
-	// check error, if not exists
-	if err := dir.mfs.api.RemoveObject(dir.mfs.config.bucket, path.Join(dir.Path, req.Name)); err != nil {
-		// what error do we need to return if the object doesn't exist anymore?
+	// todo(nl5887): test rm rf
+	if err := dir.mfs.api.RemoveObject(dir.mfs.config.bucket, req.Name); err != nil {
 		return err
 	}
 
@@ -169,10 +206,6 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 		return err
 	}
 
-	// do we want to delete immediately?
-	// or update cache file and add to queue
-	// two queues, a read queue and a write / delete queue
-	// todo(nl5887) rm -rf?
 	return nil
 }
 
@@ -191,10 +224,12 @@ func (dir *Dir) Dirent() fuse.Dirent {
 		Inode: dir.Inode, Name: path.Base(dir.Path), Type: fuse.DT_Dir,
 	}
 }
-func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.CreateResponse) (fs.Node, fs.Handle, error) {
-	fmt.Printf("CREATE %s\n", req.Name)
 
-	// Start a writable transaction.
+func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.CreateResponse) (fs.Node, fs.Handle, error) {
+	if dir.mfs.IsLocked(req.Name) {
+		return nil, nil, fuse.EPERM
+	}
+
 	tx, err := dir.mfs.db.Begin(true)
 	if err != nil {
 		return nil, nil, err
@@ -206,11 +241,7 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 
 	name := req.Name
 
-	cachePath := path.Join(dir.mfs.config.cache, name)
-
 	var f File
-	// todo(nl5887): add last update date
-
 	if err := b.Get(name, &f); err == nil {
 	} else if i, err := dir.mfs.NextSequence(tx); err != nil {
 		return nil, nil, err
@@ -237,9 +268,14 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 		return nil, nil, err
 	}
 
-	fh := dir.mfs.NewHandle(&f)
+	var fh *FileHandle
+	if v, err := dir.mfs.Acquire(&f); err != nil {
+		return nil, nil, err
+	} else {
+		fh = v
+	}
 
-	if f, err := os.Create(cachePath); err == nil {
+	if f, err := os.Create(fh.cachePath); err == nil {
 		fh.File = f
 	} else if err != nil {
 		return nil, nil, err

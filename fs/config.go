@@ -24,7 +24,9 @@ import (
 
 // Config is being used for storge of configuration items
 type Config struct {
-	bucket     string
+	bucket   string
+	basePath string
+
 	cache      string
 	cacheSize  uint64
 	accountID  string
@@ -44,9 +46,17 @@ func Bucket(name string) func(*Config) {
 	}
 }
 
+// Mountpoint configures the target mountpoint
 func Mountpoint(mountpoint string) func(*Config) {
 	return func(cfg *Config) {
 		cfg.mountpoint = mountpoint
+	}
+}
+
+// BasePath configures the root of the mounted bucket
+func BasePath(path string) func(*Config) {
+	return func(cfg *Config) {
+		cfg.basePath = path
 	}
 }
 
@@ -55,7 +65,10 @@ func Target(target string) func(*Config) {
 	return func(cfg *Config) {
 		if u, err := url.Parse(target); err == nil {
 			cfg.target = u
-			cfg.bucket = u.Path[1:]
+
+			if len(u.Path) > 0 {
+				cfg.bucket = u.Path[1:]
+			}
 		}
 	}
 }

@@ -11,14 +11,31 @@ import (
 
 type FileHandle struct {
 	*os.File
+
 	// names are confusing
 	f *File
+
+	// cache file has been written to
+	dirty bool
+
+	cachePath string
 
 	handle uint64
 }
 
+func (fh *FileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadResponse) error {
+	buff := make([]byte, req.Size)
+	n, err := fh.File.ReadAt(buff, req.Offset)
+	if err == io.EOF {
+	} else if err != nil {
+		return err
+	}
+
+	resp.Data = buff[:n]
+	return nil
+}
+
 func (fh *FileHandle) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.WriteResponse) error {
-	fmt.Println("WRITE", string(req.Data))
 	if _, err := fh.File.Seek(req.Offset, 0); err != nil {
 		fmt.Println("ERROR", err.Error())
 		return err
@@ -36,28 +53,46 @@ func (fh *FileHandle) Write(ctx context.Context, req *fuse.WriteRequest, resp *f
 		}
 
 		resp.Size = n
+
+		fh.dirty = true
+
 		return nil
 	}
 }
 
-// Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadResponse) error
-func (fh *FileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadResponse) error {
-	// check if file is in cache
-
-	buff := make([]byte, req.Size)
-	n, err := fh.File.ReadAt(buff, req.Offset)
-	if err == io.EOF {
-	} else if err != nil {
+func (fh *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) error {
+	if err := fh.Close(); err != nil {
 		return err
 	}
 
-	resp.Data = buff[:n]
-	return nil
-}
+	defer func() {
+		fh.f.mfs.Release(fh)
 
-func (f *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) error {
-	err := f.File.Close()
-	return err
+		os.Remove(fh.cachePath)
+	}()
+
+	if !fh.dirty {
+		return nil
+	}
+
+	sr := PutOperation{
+		Source: fh.Name(),
+		Target: fh.f.Path,
+		Error:  make(chan error),
+	}
+
+	if err := fh.f.mfs.sync(&sr); err != nil {
+		return err
+	}
+
+	// we'll wait for the request to be uploaded and synced, before
+	// releasing the file
+	if err := <-sr.Error; err != nil {
+		return err
+	}
+
+	// todo(nl5887): delete cache file
+	return nil
 }
 
 func (f *FileHandle) Flush(ctx context.Context, req *fuse.FlushRequest) error {

@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+// Package minfs contains the MinFS core package
 package minfs
 
 import (
@@ -41,7 +43,7 @@ var (
 	_ = meta.RegisterExt(2, Dir{})
 )
 
-// MinFS
+// MinFS contains the meta data for the MinFS client
 type MinFS struct {
 	config *Config
 	api    *minio.Client
@@ -54,13 +56,20 @@ type MinFS struct {
 	m sync.Mutex
 
 	queue *queue.Queue
+
+	syncChan chan interface{}
 }
 
+// todo(nl5887): update cache with deleted files as well
+// todo(nl5887): mkdir
+
+// New will return a new MinFS client
 func New(options ...func(*Config)) (*MinFS, error) {
 	// set defaults
 	cfg := &Config{
 		cacheSize: 10000000,
 		cache:     "./cache/",
+		basePath:  "",
 		accountID: fmt.Sprintf("%d", time.Now().UTC().Unix()),
 		gid:       0,
 		uid:       0,
@@ -76,8 +85,10 @@ func New(options ...func(*Config)) (*MinFS, error) {
 	}
 
 	fs := &MinFS{
-		config: cfg,
+		config:   cfg,
+		syncChan: make(chan interface{}),
 	}
+
 	return fs, nil
 }
 
@@ -247,6 +258,7 @@ func (mfs *MinFS) mount() (*fuse.Conn, error) {
 	)
 }
 
+// Serve starts the MinFS client
 func (mfs *MinFS) Serve() error {
 	if mfs.config.debug {
 		fuse.Debug = func(msg interface{}) {
@@ -294,14 +306,6 @@ func (mfs *MinFS) Serve() error {
 		return err
 	}
 
-	go func() {
-		// have a channel doing all get operations
-	}()
-
-	go func() {
-		// have a channel doing all put operations
-	}()
-
 	fmt.Println("Mounting target....")
 	// mount the drive
 	c, err := mfs.mount()
@@ -310,6 +314,10 @@ func (mfs *MinFS) Serve() error {
 	}
 
 	defer c.Close()
+
+	if err := mfs.startSync(); err != nil {
+		return err
+	}
 
 	fmt.Println("Mounted... Have fun!")
 	// serve the filesystem
@@ -346,18 +354,95 @@ loop:
 	return nil
 }
 
-func (mfs *MinFS) NewHandle(f *File) *FileHandle {
+type PutOperation struct {
+	Source string
+	Target string
+	Error  chan error
+}
+
+func (mfs *MinFS) sync(req *PutOperation) error {
+	mfs.syncChan <- req
+	return nil
+}
+
+func (mfs *MinFS) startSync() error {
+	go func() {
+		for req := range mfs.syncChan {
+			switch req := req.(type) {
+			case *PutOperation:
+				r, err := os.Open(req.Source)
+				if err != nil {
+					req.Error <- err
+					return
+				}
+				defer r.Close()
+
+				_, err = mfs.api.PutObject(mfs.config.bucket, req.Target[1:], r, "application/octet-stream")
+				if err != nil {
+					req.Error <- err
+					return
+				}
+
+				// todo(nl5887): remove for debugging purposes
+				// this is for testing locks
+				time.Sleep(time.Second * 2)
+
+				fmt.Printf("Upload finished: %s\n", req.Source)
+				req.Error <- err
+			default:
+				panic("Unknown type")
+			}
+		}
+	}()
+
+	return nil
+}
+
+// Release release the filehandle
+func (mfs *MinFS) Release(fh *FileHandle) {
 	mfs.m.Lock()
 	defer mfs.m.Unlock()
 
+	mfs.handles[fh.handle] = nil
+}
+
+// Acquire will return a new FileHandle
+func (mfs *MinFS) Acquire(f *File) (*FileHandle, error) {
+	mfs.m.Lock()
+	defer mfs.m.Unlock()
+
+	// generate unique cache path
+	cachePath := ""
+	if v, err := mfs.NewCachePath(); err != nil {
+		return nil, err
+	} else {
+		cachePath = v
+	}
+
 	h := &FileHandle{
 		f: f,
+
+		cachePath: cachePath,
 	}
 
 	mfs.handles = append(mfs.handles, h)
 
-	h.handle = uint64(len(mfs.handles))
-	return h
+	h.handle = uint64(len(mfs.handles) - 1)
+	return h, nil
+}
+
+func (mfs *MinFS) IsLocked(path string) bool {
+	for _, fh := range mfs.handles {
+		if fh == nil {
+			continue
+		}
+
+		if fh.f.Path == path {
+			return true
+		}
+	}
+
+	return false
 }
 
 // NextSequence will return the next free iNode
@@ -461,4 +546,18 @@ func (mfs *MinFS) scan(p string) error {
 
 type Storer interface {
 	store(tx *meta.Tx)
+}
+
+func (mfs *MinFS) NewCachePath() (string, error) {
+	cachePath := path.Join(mfs.config.cache, nextSuffix())
+	for {
+		if _, err := os.Stat(cachePath); err == nil {
+		} else if os.IsNotExist(err) {
+			return cachePath, nil
+		} else {
+			return "", err
+		}
+
+		cachePath = path.Join(mfs.config.cache, nextSuffix())
+	}
 }

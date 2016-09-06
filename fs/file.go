@@ -111,7 +111,6 @@ func (f *File) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse
 
 	if req.Valid.Size() {
 		f.Size = req.Size
-		fmt.Println("UPDATED SIZE", req.Size)
 	}
 
 	if req.Valid.Atime() {
@@ -177,68 +176,81 @@ func (f *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) error {
 }
 
 func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (fs.Handle, error) {
-	cachePath := path.Join(file.mfs.config.cache, path.Base(file.Path))
-
-	if _, err := os.Stat(cachePath); err == nil {
-	} else if os.IsNotExist(err) {
-		object, err := file.mfs.api.GetObject(file.mfs.config.bucket, file.Path[1:])
-
-		if err != nil /* No such object*/ {
-			return nil, fuse.ENOENT
-		} else if err != nil {
-			return nil, err
-		}
-		defer object.Close()
-
-		// Start a writable transaction.
-		tx, err := file.mfs.db.Begin(true)
-		if err != nil {
-			return nil, err
+	// check if the file is locked, and wait for max 5 seconds for the file to be
+	// acquired
+	for i := 0; ; /* retries */ i++ {
+		if !file.mfs.IsLocked(file.Path) {
+			break
 		}
 
-		defer tx.Rollback()
-
-		hasher := sha256.New()
-
-		var r io.Reader = object
-		r = io.TeeReader(r, hasher)
-
-		// todo(nl5887): do we want to have original filenames? or hashes of the filename
-		f, err := os.Create(cachePath)
-		if err != nil {
-			return nil, err
+		fmt.Println("File locked, retrying")
+		if i > 25 /* max number of retries */ {
+			return nil, fuse.EPERM
 		}
 
-		defer f.Close()
+		time.Sleep(time.Millisecond * 200)
+	}
 
-		if _, err := io.Copy(f, r); err != nil {
-			return nil, err
-		}
+	// todo(nl5887): cleanup
+	object, err := file.mfs.api.GetObject(file.mfs.config.bucket, file.Path[1:])
 
-		// todo(nl5887): do we want to save as hashes? this will deduplicate files in cache file
-		// and also introduces some kind of versioning, hasher can be saved in filehandle
-		fmt.Printf("Sum: %#v\n", hasher.Sum(nil))
+	if err != nil /* todo(nl5887): No such object*/ {
+		return nil, fuse.ENOENT
+	} else if err != nil {
+		return nil, err
+	}
+	defer object.Close()
 
-		file.Hash = hasher.Sum(nil)
-
-		if err := file.store(tx); err != nil {
-			return nil, err
-		}
-
-		// Commit the transaction and check for error.
-		if err := tx.Commit(); err != nil {
-			return nil, err
-		}
-
-	} else {
+	// Start a writable transaction.
+	tx, err := file.mfs.db.Begin(true)
+	if err != nil {
 		return nil, err
 	}
 
-	// update cache bucket!
+	defer tx.Rollback()
 
-	fh := file.mfs.NewHandle(file)
+	hasher := sha256.New()
 
-	if f, err := os.OpenFile(cachePath, int(req.Flags), file.mfs.config.mode); err != nil {
+	var r io.Reader = object
+	r = io.TeeReader(r, hasher)
+
+	// check req.Flags, if open for writing and already open,
+	// then deny. Now we're only allowing single open files.
+	var fh *FileHandle
+	if v, err := file.mfs.Acquire(file); err != nil {
+		return nil, err
+	} else {
+		fh = v
+	}
+
+	f, err := os.Create(fh.cachePath)
+	if err != nil {
+		return nil, err
+	}
+
+	defer f.Close()
+
+	if _, err := io.Copy(f, r); err != nil {
+		return nil, err
+	}
+
+	// todo(nl5887): do we want to save as hashes? this will deduplicate files in cache file
+	// and also introduces some kind of versioning, hasher can be saved in filehandle
+	// we only don't have the hashes being returned at the time from the storage
+	fmt.Printf("Sum: %#v\n", hasher.Sum(nil))
+
+	file.Hash = hasher.Sum(nil)
+
+	if err := file.store(tx); err != nil {
+		return nil, err
+	}
+
+	// Commit the transaction and check for error.
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	if f, err := os.OpenFile(fh.cachePath, int(req.Flags), file.mfs.config.mode); err != nil {
 		return nil, err
 	} else {
 		fh.File = f
@@ -254,10 +266,10 @@ func (file *File) bucket(tx *meta.Tx) *meta.Bucket {
 }
 
 func (file *File) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs.Node) error {
-	fmt.Println("RENAME")
-
-	// copy and delete the old one?
-	return fmt.Errorf("Rename is not supported.")
+	// create new file
+	// copy old file to new file
+	// delete old file
+	return fuse.ENOSYS
 }
 
 func (file *File) Getattr(ctx context.Context, req *fuse.GetattrRequest, resp *fuse.GetattrResponse) error {

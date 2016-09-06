@@ -50,28 +50,41 @@ $ umount /hello
 * **GID**: The default gid to assign for files from storage.
 * **UID**: The default gid to assign for files from storage.
 * **Cache**: Location for cache folder.
+* **Path**: The root path in the bucket
+* **Debug**: Enables debug logs
 
+## Read
+
+Every operation the latest version will be retrieved. We don't have a method of verifying if the file
+has been changed on the provider, so this is the safest and will work in most cases.
+
+## Write
+
+When a **dirty** file has been closed, it will be uploaded to the bucket, when the file is 
+completely uploaded it will be unlocked.
+
+## Locking
+
+The locking mechanism is very basic, only one operation is allowed at a time. This prevents
+issues with synchronization and keeps the fuse driver simple.
 
 ## Frequently asked questions
 
 * if you cannot unmount, try seeing what files are open on the mount. `lsof |grep mount`
 
+## Debugging
+
+We've added a sleep to the upload, this allows us to test the locking mechanism.
 
 ## Todo
 
 There is a long list of todos:
 
-* work on locking
-* work on synchronization to Minio
 * allow stats to be printed using a signal
 * use local cache folder, for most used files. Do we want to register / cache this info in a bolt db?
-* cleanup caching folder, have a size limit
-* learn what files to cache
-* use Minio notifications to actively update metadata and cached files
+* use Minio notifications to actively update metadata 
 * one mountpoint per bucket
-* use minio notifications if possible, to update cache
 * each mountpoint will have its own cache folders and can be mounted to one bucket
-* rename files
+* implement rename files
+* implement mkdir 
 * use minio configs? .minfs file for keys?
-* should we use a unique file handle for the file in cache? That way we can have multiple versions to be uploaded.
-* on first access, copy file to file+handle then upload file+handle

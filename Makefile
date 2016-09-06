@@ -52,7 +52,7 @@ test: getdeps verifiers
 	@$(foreach DIR, $(DIRS), go test $(GOFLAGS) $(DIR);)
 
 gomake-all: build
-	@echo "Installing mc:"
+	@echo "Installing minfs:"
 	@go build --ldflags "$(LDFLAGS)" -o $(GOPATH)/bin/minfs
 
 coverage: getdeps verifiers
@@ -78,18 +78,14 @@ pkg-list:
 
 install: gomake-all
 
-all-tests: test
-	# TODO disable them for now.
-	#@./tests/test-minio.sh
-
 release: verifiers
-	@MC_RELEASE=RELEASE GO15VENDOREXPERIMENT=1 ./buildscripts/build.sh
+	@MINFS_RELEASE=RELEASE GO15VENDOREXPERIMENT=1 ./buildscripts/build.sh
 
 experimental: verifiers
-	@MC_RELEASE=EXPERIMENTAL GO15VENDOREXPERIMENT=1 ./buildscripts/build.sh
+	@MINFS_RELEASE=EXPERIMENTAL GO15VENDOREXPERIMENT=1 ./buildscripts/build.sh
 
 clean:
 	@rm -f cover.out
-	@rm -f mc
+	@rm -f minfs
 	@find . -name '*.test' | xargs rm -fv
 	@rm -fr release

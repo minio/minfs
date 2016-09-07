@@ -1,8 +1,10 @@
 package minfs
 
 import (
+	"fmt"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"bazil.org/fuse"
@@ -14,6 +16,8 @@ import (
 // Dir implements both Node and Handle for the root directory.
 type Dir struct {
 	mfs *MinFS
+
+	parent *Dir
 
 	Path  string
 	Inode uint64
@@ -35,6 +39,7 @@ type Dir struct {
 	Flags    uint32 // see chflags(2)
 }
 
+// Attr returns the attributes for the directory
 func (dir *Dir) Attr(ctx context.Context, a *fuse.Attr) error {
 	*a = fuse.Attr{
 		Inode: dir.Inode,
@@ -59,17 +64,18 @@ func (dir *Dir) Attr(ctx context.Context, a *fuse.Attr) error {
 
 // todo(nl5887): implement cancel
 // todo(nl5887): implement rename
-// todo(nl5887): implement mkdir
-// todo(nl5887): implement removed files
 // todo(nl5887): buckets in buckets in buckets? or just subbuckets in minio bucket?
 
-func (d *Dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
-	// todo(nl5887): could be called when not yet initialized. for example
-	// with empty cache and ls'ing subfolder
+// Lookup returns the directory node
+func (dir *Dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
+	// todo: make sure that we know of the folder, when not yet initialized
+	if err := dir.scan(); err != nil {
+		return nil, err
+	}
 
 	var o interface{} // meta.Object
-	if err := d.mfs.db.View(func(tx *meta.Tx) error {
-		b := d.bucket(tx)
+	if err := dir.mfs.db.View(func(tx *meta.Tx) error {
+		b := dir.bucket(tx)
 		return b.Get(name, &o)
 	}); err == nil {
 	} else if true /* todo(nl5887): check for no such object */ {
@@ -79,19 +85,134 @@ func (d *Dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
 	}
 
 	if file, ok := o.(File); ok {
-		file.mfs = d.mfs
+		file.mfs = dir.mfs
+		file.dir = dir
 		return &file, nil
-	} else if dir, ok := o.(Dir); ok {
-		dir.mfs = d.mfs
-		return &dir, nil
+	} else if subdir, ok := o.(Dir); ok {
+		subdir.mfs = dir.mfs
+		subdir.parent = dir
+		return &subdir, nil
 	}
 
 	return nil, fuse.ENOENT
 }
 
+// FullPath returns the full path including parent paths for current dir
+func (dir *Dir) FullPath() string {
+	fullPath := ""
+
+	p := dir
+	for {
+		if p == nil {
+			break
+		}
+
+		fullPath = path.Join(p.Path, fullPath)
+
+		p = p.parent
+	}
+
+	fmt.Println(fullPath)
+	return fullPath
+}
+
+func (dir *Dir) scan() error {
+	tx, err := dir.mfs.db.Begin(true)
+	if err != nil {
+		return err
+	}
+
+	defer tx.Rollback()
+
+	b := dir.bucket(tx)
+
+	doneCh := make(chan struct{})
+	defer close(doneCh)
+
+	prefix := dir.FullPath()
+	if prefix != "" {
+		prefix = prefix + "/"
+	}
+
+	ch := dir.mfs.api.ListObjectsV2(dir.mfs.config.bucket, prefix, false, doneCh)
+	for message := range ch {
+		key := message.Key
+
+		fmt.Println("scan", key)
+
+		if strings.HasSuffix(key, "/") {
+			// todo(nl5887): remove "/"
+
+			var d Dir
+			if err := b.Get(key, &d); err == nil {
+			} else if !meta.IsNoSuchObject(err) {
+				return err
+			} else if i, err := dir.mfs.NextSequence(tx); err != nil {
+				return err
+			} else {
+				// todo(nl5887): check if we need to update, and who'll win?
+				d = Dir{
+					parent: dir,
+
+					Path:  path.Base(key),
+					Inode: i,
+
+					Mode: 0770 | os.ModeDir,
+					GID:  dir.mfs.config.gid,
+					UID:  dir.mfs.config.uid,
+
+					Chgtime: message.LastModified,
+					Crtime:  message.LastModified,
+					Mtime:   message.LastModified,
+					Atime:   message.LastModified,
+				}
+
+				if err := d.store(tx); err != nil {
+					return err
+				}
+			}
+		} else {
+			var f File
+			if err := b.Get(key, &f); err == nil {
+			} else if !meta.IsNoSuchObject(err) {
+				return err
+			} else if i, err := dir.mfs.NextSequence(tx); err != nil {
+				return err
+			} else {
+				// todo(nl5887): check if we need to update, and who'll win?
+				f = File{
+					dir:  dir,
+					Path: path.Base(key),
+
+					Size:    uint64(message.Size),
+					Inode:   i,
+					Mode:    dir.mfs.config.mode,
+					GID:     dir.mfs.config.gid,
+					UID:     dir.mfs.config.uid,
+					Chgtime: message.LastModified,
+					Crtime:  message.LastModified,
+					Mtime:   message.LastModified,
+					Atime:   message.LastModified,
+					ETag:    message.ETag,
+				}
+
+				if err := f.store(tx); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return tx.Commit()
+}
+
+// ReadDirAll will return all files in current dir
 func (dir *Dir) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	// if not exists then scan
-	dir.mfs.scan("/" + dir.Path)
+	// todo(nl5887): should we keep last scan date? do periodic scan to update cache?
+	if err := dir.scan(); err != nil {
+		return nil, err
+	}
 
 	// cache only doesn't need writable transaction
 	// update cache folder with bucket list
@@ -102,16 +223,18 @@ func (dir *Dir) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 
 	defer tx.Rollback()
 
-	b := tx.Bucket("minio").Bucket(dir.Path)
+	b := dir.bucket(tx)
 
 	var entries = []fuse.Dirent{}
 
 	// todo(nl5887): use make([]fuse.Dirent{}, count)
 	if err := b.ForEach(func(k string, o interface{}) error {
 		if file, ok := o.(File); ok {
+			file.dir = dir
 			entries = append(entries, file.Dirent())
-		} else if dir, ok := o.(Dir); ok {
-			entries = append(entries, dir.Dirent())
+		} else if subdir, ok := o.(Dir); ok {
+			subdir.parent = dir
+			entries = append(entries, subdir.Dirent())
 		} else {
 			panic("Could not find type. Try to remove cache.")
 		}
@@ -125,13 +248,21 @@ func (dir *Dir) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 }
 
 func (dir *Dir) bucket(tx *meta.Tx) *meta.Bucket {
-	b := tx.Bucket("minio")
-	return b.Bucket(dir.Path)
+	// root
+	if dir.parent == nil {
+		return tx.Bucket("minio/")
+	}
+
+	b := dir.parent.bucket(tx)
+	return b.Bucket(dir.Path + "/")
 }
 
+// Mkdir will make a new directory below current dir
 func (dir *Dir) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, error) {
 	subdir := Dir{
-		mfs:  dir.mfs,
+		parent: dir,
+		mfs:    dir.mfs,
+
 		Path: req.Name,
 
 		Mode: 0770 | os.ModeDir,
@@ -151,11 +282,7 @@ func (dir *Dir) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, err
 
 	defer tx.Rollback()
 
-	// todo(nl5887): something is wrong with nested dirs. use all in minio bucket
-	// or subbuckets?
-	b := tx.Bucket("minio")
-	// b := dir.bucket(tx)
-	if err := b.Put(req.Name, &subdir); err != nil {
+	if err := subdir.store(tx); err != nil {
 		return nil, err
 	}
 
@@ -167,9 +294,31 @@ func (dir *Dir) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, err
 	return &subdir, nil
 }
 
+func (dir *Dir) wait(path string) error {
+	// todo(nl5887): should we add mutex here? We cannot use mfs.m mutex,
+	// because that will create deadlock
+
+	// check if the file is locked, and wait for max 5 seconds for the file to be
+	// acquired
+	for i := 0; ; /* retries */ i++ {
+		if !dir.mfs.IsLocked(path) {
+			break
+		}
+
+		if i > 25 /* max number of retries */ {
+			return fuse.EPERM
+		}
+
+		time.Sleep(time.Millisecond * 200)
+	}
+
+	return nil
+}
+
+// Remove will delete a file or directory from current directory
 func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
-	if dir.mfs.IsLocked(req.Name) {
-		return fuse.EPERM
+	if err := dir.wait(req.Name); err != nil {
+		return err
 	}
 
 	tx, err := dir.mfs.db.Begin(true)
@@ -184,6 +333,10 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 	var o interface{}
 	if err := b.Get(req.Name, &o); err != nil {
 		return err
+	} else if f, ok := o.(*File); ok {
+		f.dir = dir
+	} else if d, ok := o.(*Dir); ok {
+		d.parent = dir
 	}
 
 	if err := b.Delete(req.Name); err == nil {
@@ -194,11 +347,10 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 	}
 
 	if req.Dir {
-		b.DeleteBucket(req.Name)
+		b.DeleteBucket(req.Name + "/")
 	}
 
-	// todo(nl5887): test rm rf
-	if err := dir.mfs.api.RemoveObject(dir.mfs.config.bucket, req.Name); err != nil {
+	if err := dir.mfs.api.RemoveObject(dir.mfs.config.bucket, path.Join(dir.FullPath(), req.Name)); err != nil {
 		return err
 	}
 
@@ -210,24 +362,29 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 }
 
 func (dir *Dir) store(tx *meta.Tx) error {
-	b := tx.Bucket("minio")
+	// directories will be stored in their parent buckets
+	b := dir.parent.bucket(tx)
 
-	subbucketPath := path.Dir(dir.Path)
-	if b, err := b.CreateBucketIfNotExists(subbucketPath); err != nil {
+	subbucketPath := path.Base(dir.Path)
+	if _, err := b.CreateBucketIfNotExists(subbucketPath + "/"); err != nil {
 		return err
-	} else {
-		return b.Put(path.Base(dir.Path), dir)
 	}
+
+	return b.Put(subbucketPath, dir)
 }
+
+// Dirent will return the fuse Dirent for current dir
 func (dir *Dir) Dirent() fuse.Dirent {
 	return fuse.Dirent{
 		Inode: dir.Inode, Name: path.Base(dir.Path), Type: fuse.DT_Dir,
 	}
 }
 
+// Create will return a new empty file in current dir, if the file is currently locked, it will
+// wait for the lock to be freed.
 func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.CreateResponse) (fs.Node, fs.Handle, error) {
-	if dir.mfs.IsLocked(req.Name) {
-		return nil, nil, fuse.EPERM
+	if err := dir.wait(req.Name); err != nil {
+		return nil, nil, err
 	}
 
 	tx, err := dir.mfs.db.Begin(true)
@@ -243,13 +400,17 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 
 	var f File
 	if err := b.Get(name, &f); err == nil {
+		f.dir = dir
 	} else if i, err := dir.mfs.NextSequence(tx); err != nil {
 		return nil, nil, err
 	} else {
 		f = File{
+			mfs: dir.mfs,
+			dir: dir,
+
 			Size:    uint64(0),
 			Inode:   i,
-			Path:    path.Join(dir.Path, req.Name),
+			Path:    req.Name,
 			Mode:    req.Mode, // dir.mfs.config.mode, // should we use same mode for scan?
 			UID:     dir.mfs.config.uid,
 			GID:     dir.mfs.config.gid,
@@ -260,7 +421,6 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 			ETag:    "",
 
 			// req.Umask
-			mfs: dir.mfs,
 		}
 	}
 
@@ -275,6 +435,8 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 		fh = v
 	}
 
+	fh.dirty = true
+
 	if f, err := os.Create(fh.cachePath); err == nil {
 		fh.File = f
 	} else if err != nil {
@@ -287,7 +449,5 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 	}
 
 	resp.Handle = fuse.HandleID(fh.handle)
-
-	// todo(nl5887): fs.NewHandle() f.NewHandle() ?
 	return &f, fh, nil
 }

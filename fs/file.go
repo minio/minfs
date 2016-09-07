@@ -18,6 +18,8 @@ import (
 type File struct {
 	mfs *MinFS
 
+	dir *Dir
+
 	Path string
 
 	Inode uint64
@@ -43,14 +45,8 @@ type File struct {
 }
 
 func (file *File) store(tx *meta.Tx) error {
-	b := tx.Bucket("minio")
-
-	subbucketPath := path.Dir(file.Path)
-	if b, err := b.CreateBucketIfNotExists(subbucketPath); err != nil {
-		return err
-	} else {
-		return b.Put(path.Base(file.Path), file)
-	}
+	b := file.bucket(tx)
+	return b.Put(path.Base(file.Path), file)
 }
 
 func (file *File) Forget() {
@@ -86,15 +82,6 @@ func (f *File) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse
 	}
 
 	defer tx.Rollback()
-
-	b := tx.Bucket("minio")
-
-	subbucketPath := path.Dir(f.Path)
-	b, err = b.CreateBucketIfNotExists(subbucketPath)
-	if err != nil {
-		fmt.Println("Bucket not exists", subbucketPath)
-		return err
-	}
 
 	// update cache
 	if req.Valid.Mode() {
@@ -165,35 +152,35 @@ func (f *File) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse
 		return err
 	}
 
-	fmt.Printf("Setattr %#v\n", resp.Attr)
-	//pretty.Print(f)
-
 	return nil
 }
 
-func (f *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) error {
+func (file *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) error {
 	return nil
+}
+
+func (file *File) FullPath() string {
+	return path.Join(file.dir.FullPath(), file.Path)
 }
 
 func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (fs.Handle, error) {
-	// check if the file is locked, and wait for max 5 seconds for the file to be
-	// acquired
-	for i := 0; ; /* retries */ i++ {
-		if !file.mfs.IsLocked(file.Path) {
-			break
-		}
+	if err := file.dir.wait(file.Path); err != nil {
+		return nil, err
+	}
 
-		fmt.Println("File locked, retrying")
-		if i > 25 /* max number of retries */ {
-			return nil, fuse.EPERM
-		}
-
-		time.Sleep(time.Millisecond * 200)
+	// check req.Flags, if open for writing and already open,
+	// then deny. Now we're only allowing single open files.
+	var fh *FileHandle
+	if v, err := file.mfs.Acquire(file); err != nil {
+		return nil, err
+	} else {
+		fh = v
 	}
 
 	// todo(nl5887): cleanup
-	object, err := file.mfs.api.GetObject(file.mfs.config.bucket, file.Path[1:])
+	fullPath := file.FullPath()
 
+	object, err := file.mfs.api.GetObject(file.mfs.config.bucket, fullPath)
 	if err != nil /* todo(nl5887): No such object*/ {
 		return nil, fuse.ENOENT
 	} else if err != nil {
@@ -214,15 +201,6 @@ func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.Op
 	var r io.Reader = object
 	r = io.TeeReader(r, hasher)
 
-	// check req.Flags, if open for writing and already open,
-	// then deny. Now we're only allowing single open files.
-	var fh *FileHandle
-	if v, err := file.mfs.Acquire(file); err != nil {
-		return nil, err
-	} else {
-		fh = v
-	}
-
 	f, err := os.Create(fh.cachePath)
 	if err != nil {
 		return nil, err
@@ -230,8 +208,10 @@ func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.Op
 
 	defer f.Close()
 
-	if _, err := io.Copy(f, r); err != nil {
+	if size, err := io.Copy(f, r); err != nil {
 		return nil, err
+	} else {
+		file.Size = uint64(size)
 	}
 
 	// todo(nl5887): do we want to save as hashes? this will deduplicate files in cache file
@@ -261,8 +241,8 @@ func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.Op
 }
 
 func (file *File) bucket(tx *meta.Tx) *meta.Bucket {
-	b := tx.Bucket("minio")
-	return b.Bucket(path.Base(file.Path))
+	b := file.dir.bucket(tx)
+	return b
 }
 
 func (file *File) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs.Node) error {

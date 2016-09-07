@@ -72,15 +72,17 @@ func (fh *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) err
 	}()
 
 	if !fh.dirty {
+		fmt.Println("NOT DIRTY")
 		return nil
 	}
 
 	sr := PutOperation{
 		Source: fh.Name(),
-		Target: fh.f.Path,
+		Target: fh.f.FullPath(),
 		Error:  make(chan error),
 	}
 
+	fmt.Printf("Release :%#v\n", sr)
 	if err := fh.f.mfs.sync(&sr); err != nil {
 		return err
 	}
@@ -91,10 +93,28 @@ func (fh *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) err
 		return err
 	}
 
+	// update cache
+	// Start a writable transaction.
+	tx, err := fh.f.mfs.db.Begin(true)
+	if err != nil {
+		return err
+	}
+
+	defer tx.Rollback()
+
+	if err := fh.f.store(tx); err != nil {
+		return err
+	}
+
+	// Commit the transaction and check for error.
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
 	// todo(nl5887): delete cache file
 	return nil
 }
 
-func (f *FileHandle) Flush(ctx context.Context, req *fuse.FlushRequest) error {
-	return f.File.Sync()
+func (fh *FileHandle) Flush(ctx context.Context, req *fuse.FlushRequest) error {
+	return fh.File.Sync()
 }

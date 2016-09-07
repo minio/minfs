@@ -24,7 +24,6 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -192,7 +191,7 @@ func (mfs *MinFS) startNotificationListener() error {
 
 				dir, _ := path.Split(key)
 
-				b := tx.Bucket("minio")
+				b := tx.Bucket("minio/")
 
 				if v, err := b.CreateBucketIfNotExists(dir); err != nil {
 					fmt.Print("Error:", err)
@@ -277,10 +276,12 @@ func (mfs *MinFS) Serve() error {
 	defer mfs.db.Close()
 
 	fmt.Println("Initializing cache database...")
-	mfs.db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("minio"))
+	if err := mfs.db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("minio/"))
 		return err
-	})
+	}); err != nil {
+		return err
+	}
 
 	fmt.Println("Initializing minio client...")
 
@@ -297,12 +298,6 @@ func (mfs *MinFS) Serve() error {
 	// set notifications
 	fmt.Println("Starting notification listener...")
 	if err := mfs.startNotificationListener(); err != nil {
-		return err
-	}
-
-	// we are doing an initial scan of the filesystem
-	fmt.Println("Scanning source bucket....")
-	if err := mfs.scan("/"); err != nil {
 		return err
 	}
 
@@ -377,7 +372,7 @@ func (mfs *MinFS) startSync() error {
 				}
 				defer r.Close()
 
-				_, err = mfs.api.PutObject(mfs.config.bucket, req.Target[1:], r, "application/octet-stream")
+				_, err = mfs.api.PutObject(mfs.config.bucket, req.Target[:], r, "application/octet-stream")
 				if err != nil {
 					req.Error <- err
 					return
@@ -387,7 +382,7 @@ func (mfs *MinFS) startSync() error {
 				// this is for testing locks
 				time.Sleep(time.Second * 2)
 
-				fmt.Printf("Upload finished: %s\n", req.Source)
+				fmt.Printf("Upload finished: %s -> %s.\n", req.Source, req.Target)
 				req.Error <- err
 			default:
 				panic("Unknown type")
@@ -447,101 +442,19 @@ func (mfs *MinFS) IsLocked(path string) bool {
 
 // NextSequence will return the next free iNode
 func (mfs *MinFS) NextSequence(tx *meta.Tx) (sequence uint64, err error) {
-	bucket := tx.Bucket("minio")
+	bucket := tx.Bucket("minio/")
 	return bucket.NextSequence()
 }
 
 // Root is the root folder of the MinFS mountpoint
 func (mfs *MinFS) Root() (fs.Node, error) {
 	return &Dir{
+		parent: nil,
+
 		mfs:  mfs,
 		Mode: os.ModeDir | 0555,
-		Path: "/",
+		Path: "",
 	}, nil
-}
-
-func (mfs *MinFS) scan(p string) error {
-	tx, err := mfs.db.Begin(true)
-	if err != nil {
-		return err
-	}
-
-	defer tx.Rollback()
-
-	b := tx.Bucket("minio")
-
-	if child, err := b.CreateBucketIfNotExists(p); err != nil {
-		return err
-	} else {
-		b = child
-	}
-
-	doneCh := make(chan struct{})
-	defer close(doneCh)
-
-	ch := mfs.api.ListObjectsV2(mfs.config.bucket, p[1:], false, doneCh)
-
-	for message := range ch {
-		key := message.Key
-
-		if strings.HasSuffix(key, "/") {
-			var d Dir
-			if err := b.Get(key, &d); err == nil {
-			} else if !meta.IsNoSuchObject(err) {
-				return err
-			} else if i, err := mfs.NextSequence(tx); err != nil {
-				return err
-			} else {
-				// todo(nl5887): check if we need to update, and who'll win?
-				d = Dir{
-					Path:  "/" + key,
-					Inode: i,
-
-					Mode: 0770 | os.ModeDir,
-					GID:  mfs.config.gid,
-					UID:  mfs.config.uid,
-
-					Chgtime: message.LastModified,
-					Crtime:  message.LastModified,
-					Mtime:   message.LastModified,
-					Atime:   message.LastModified,
-				}
-
-				if err := b.Put(path.Base(key), &d); err != nil {
-					return err
-				}
-			}
-		} else {
-			var f File
-			if err := b.Get(key, &f); err == nil {
-			} else if !meta.IsNoSuchObject(err) {
-				return err
-			} else if i, err := mfs.NextSequence(tx); err != nil {
-				return err
-			} else {
-				// todo(nl5887): check if we need to update, and who'll win?
-				f = File{
-					Size:    uint64(message.Size),
-					Inode:   i,
-					Mode:    mfs.config.mode,
-					GID:     mfs.config.gid,
-					UID:     mfs.config.uid,
-					Chgtime: message.LastModified,
-					Crtime:  message.LastModified,
-					Mtime:   message.LastModified,
-					Atime:   message.LastModified,
-					Path:    "/" + key,
-					ETag:    message.ETag,
-				}
-
-				if err := f.store(tx); err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return tx.Commit()
 }
 
 type Storer interface {

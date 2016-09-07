@@ -59,8 +59,11 @@ func (b *Bucket) NextSequence() (uint64, error) {
 }
 
 func (b *Bucket) ForEach(fn func(string, interface{}) error) error {
-
 	return b.InnerBucket.ForEach(func(k, v []byte) error {
+		if k[len(k)-1] == '/' {
+			return nil
+		}
+
 		var o interface{}
 		if err := msgpack.Unmarshal(v, &o); err != nil {
 			return err

@@ -20,6 +20,8 @@ import (
 	"errors"
 	"net/url"
 	"os"
+	"path"
+	"strings"
 )
 
 // Config is being used for storge of configuration items
@@ -53,21 +55,20 @@ func Mountpoint(mountpoint string) func(*Config) {
 	}
 }
 
-// BasePath configures the root of the mounted bucket
-func BasePath(path string) func(*Config) {
-	return func(cfg *Config) {
-		cfg.basePath = path
-	}
-}
-
 // Bucket option for Config
 func Target(target string) func(*Config) {
 	return func(cfg *Config) {
 		if u, err := url.Parse(target); err == nil {
 			cfg.target = u
 
-			if len(u.Path) > 0 {
-				cfg.bucket = u.Path[1:]
+			parts := strings.Split(u.Path[1:], "/")
+
+			if len(parts) >= 0 {
+				cfg.bucket = parts[0]
+			}
+
+			if len(parts) >= 1 {
+				cfg.basePath = path.Join(parts[1:]...)
 			}
 		}
 	}

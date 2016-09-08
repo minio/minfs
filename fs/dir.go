@@ -97,6 +97,11 @@ func (dir *Dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
 	return nil, fuse.ENOENT
 }
 
+// RemotePath returns the full path including parent paths for current dir on the remote
+func (dir *Dir) RemotePath() string {
+	return path.Join(dir.mfs.config.basePath, dir.FullPath())
+}
+
 // FullPath returns the full path including parent paths for current dir
 func (dir *Dir) FullPath() string {
 	fullPath := ""
@@ -129,10 +134,10 @@ func (dir *Dir) scan() error {
 	doneCh := make(chan struct{})
 	defer close(doneCh)
 
-	prefix := dir.FullPath()
-	if prefix != "" {
-		prefix = prefix + "/"
-	}
+	prefix := dir.RemotePath()
+	prefix = prefix + "/"
+
+	// todo(nl5887): remove deleted objects still in cache
 
 	ch := dir.mfs.api.ListObjectsV2(dir.mfs.config.bucket, prefix, false, doneCh)
 	for message := range ch {
@@ -350,7 +355,7 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 		b.DeleteBucket(req.Name + "/")
 	}
 
-	if err := dir.mfs.api.RemoveObject(dir.mfs.config.bucket, path.Join(dir.FullPath(), req.Name)); err != nil {
+	if err := dir.mfs.api.RemoveObject(dir.mfs.config.bucket, path.Join(dir.RemotePath(), req.Name)); err != nil {
 		return err
 	}
 
@@ -488,14 +493,14 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 	} else if file, ok := o.(File); ok {
 		file.dir = dir
 
-		oldPath := file.FullPath()
+		oldPath := file.RemotePath()
 
 		file.Path = req.NewName
 		file.dir = newDir
 
 		sr := MoveOperation{
 			Source: oldPath,
-			Target: file.FullPath(),
+			Target: file.RemotePath(),
 			Operation: Operation{
 				Error: make(chan error),
 			},
@@ -521,7 +526,7 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 		doneCh := make(chan struct{})
 		defer close(doneCh)
 
-		oldPath := path.Join(dir.FullPath(), req.OldName)
+		oldPath := path.Join(dir.RemotePath(), req.OldName)
 
 		// implement abort
 
@@ -530,7 +535,7 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 
 		ch := dir.mfs.api.ListObjectsV2(dir.mfs.config.bucket, oldPath+"/", true, doneCh)
 		for message := range ch {
-			newPath := path.Join(newDir.FullPath(), req.NewName, message.Key[len(oldPath):])
+			newPath := path.Join(newDir.RemotePath(), req.NewName, message.Key[len(oldPath):])
 
 			sr := MoveOperation{
 				Source: message.Key,

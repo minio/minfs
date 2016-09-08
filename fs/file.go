@@ -159,6 +159,10 @@ func (file *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) error {
 	return nil
 }
 
+func (file *File) RemotePath() string {
+	return path.Join(file.dir.RemotePath(), file.Path)
+}
+
 func (file *File) FullPath() string {
 	return path.Join(file.dir.FullPath(), file.Path)
 }
@@ -178,9 +182,7 @@ func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.Op
 	}
 
 	// todo(nl5887): cleanup
-	fullPath := file.FullPath()
-
-	object, err := file.mfs.api.GetObject(file.mfs.config.bucket, fullPath)
+	object, err := file.mfs.api.GetObject(file.mfs.config.bucket, file.RemotePath())
 	if err != nil /* todo(nl5887): No such object*/ {
 		return nil, fuse.ENOENT
 	} else if err != nil {

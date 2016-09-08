@@ -72,19 +72,17 @@ func (fh *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) err
 	}()
 
 	if !fh.dirty {
-		fmt.Println("NOT DIRTY")
 		return nil
 	}
 
 	sr := PutOperation{
 		Source: fh.Name(),
-		Target: fh.f.FullPath(),
+		Target: fh.f.RemotePath(),
 		Operation: Operation{
 			Error: make(chan error),
 		},
 	}
 
-	fmt.Printf("Release :%#v\n", sr)
 	if err := fh.f.mfs.sync(&sr); err != nil {
 		return err
 	}

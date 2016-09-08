@@ -162,7 +162,8 @@ func (dir *Dir) scan(ctx context.Context) error {
 		if strings.HasSuffix(key, "/") {
 			var d Dir
 			if err := b.Get(key, &d); err == nil {
-				// todo(nl5887): should update metadata here
+				d.parent = dir
+				d.mfs = dir.mfs
 			} else if !meta.IsNoSuchObject(err) {
 				return err
 			} else if i, err := dir.mfs.NextSequence(tx); err != nil {
@@ -185,15 +186,37 @@ func (dir *Dir) scan(ctx context.Context) error {
 					Atime:   message.LastModified,
 				}
 
-				if err := d.store(tx); err != nil {
-					return err
-				}
+			}
+
+			if err := d.store(tx); err != nil {
+				return err
 			}
 
 			objects[key] = d
 		} else {
 			var f File
 			if err := b.Get(key, &f); err == nil {
+				f.dir = dir
+				f.mfs = dir.mfs
+
+				f.Size = uint64(message.Size)
+				f.ETag = message.ETag
+
+				if message.LastModified.After(f.Chgtime) {
+					f.Chgtime = message.LastModified
+				}
+
+				if message.LastModified.After(f.Crtime) {
+					f.Crtime = message.LastModified
+				}
+
+				if message.LastModified.After(f.Mtime) {
+					f.Mtime = message.LastModified
+				}
+
+				if message.LastModified.After(f.Atime) {
+					f.Atime = message.LastModified
+				}
 			} else if !meta.IsNoSuchObject(err) {
 				return err
 			} else if i, err := dir.mfs.NextSequence(tx); err != nil {
@@ -216,9 +239,10 @@ func (dir *Dir) scan(ctx context.Context) error {
 					ETag:    message.ETag,
 				}
 
-				if err := f.store(tx); err != nil {
-					return err
-				}
+			}
+
+			if err := f.store(tx); err != nil {
+				return err
 			}
 		}
 	}

@@ -79,7 +79,9 @@ func (fh *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) err
 	sr := PutOperation{
 		Source: fh.Name(),
 		Target: fh.f.FullPath(),
-		Error:  make(chan error),
+		Operation: Operation{
+			Error: make(chan error),
+		},
 	}
 
 	fmt.Printf("Release :%#v\n", sr)

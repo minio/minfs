@@ -349,13 +349,32 @@ loop:
 	return nil
 }
 
-type PutOperation struct {
-	Source string
-	Target string
-	Error  chan error
+type Operation struct {
+	Error chan error
 }
 
-func (mfs *MinFS) sync(req *PutOperation) error {
+type MoveOperation struct {
+	Operation
+
+	Source string
+	Target string
+}
+
+type CopyOperation struct {
+	Operation
+
+	Source string
+	Target string
+}
+
+type PutOperation struct {
+	Operation
+
+	Source string
+	Target string
+}
+
+func (mfs *MinFS) sync(req interface{}) error {
 	mfs.syncChan <- req
 	return nil
 }
@@ -364,6 +383,22 @@ func (mfs *MinFS) startSync() error {
 	go func() {
 		for req := range mfs.syncChan {
 			switch req := req.(type) {
+			case *MoveOperation:
+				if err := mfs.api.CopyObject(mfs.config.bucket, req.Target, path.Join(mfs.config.bucket, req.Source), minio.NewCopyConditions()); err != nil {
+					req.Error <- err
+					return
+				} else if err := mfs.api.RemoveObject(mfs.config.bucket, req.Source); err != nil {
+					req.Error <- err
+				} else {
+					req.Error <- nil
+				}
+			case *CopyOperation:
+				if err := mfs.api.CopyObject(mfs.config.bucket, req.Target, path.Join(mfs.config.bucket, req.Source), minio.NewCopyConditions()); err != nil {
+					req.Error <- err
+					return
+				} else {
+					req.Error <- err
+				}
 			case *PutOperation:
 				r, err := os.Open(req.Source)
 				if err != nil {
@@ -372,7 +407,7 @@ func (mfs *MinFS) startSync() error {
 				}
 				defer r.Close()
 
-				_, err = mfs.api.PutObject(mfs.config.bucket, req.Target[:], r, "application/octet-stream")
+				_, err = mfs.api.PutObject(mfs.config.bucket, req.Target, r, "application/octet-stream")
 				if err != nil {
 					req.Error <- err
 					return

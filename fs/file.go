@@ -245,13 +245,6 @@ func (file *File) bucket(tx *meta.Tx) *meta.Bucket {
 	return b
 }
 
-func (file *File) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs.Node) error {
-	// create new file
-	// copy old file to new file
-	// delete old file
-	return fuse.ENOSYS
-}
-
 func (file *File) Getattr(ctx context.Context, req *fuse.GetattrRequest, resp *fuse.GetattrResponse) error {
 	resp.Attr = fuse.Attr{
 		Inode: file.Inode,

@@ -451,3 +451,134 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 	resp.Handle = fuse.HandleID(fh.handle)
 	return &f, fh, nil
 }
+
+func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node) error {
+	// todo(nl5887): implement cancel
+
+	//  	for {
+	//  		v, err := DoSomething(ctx)
+	//  		if err != nil {
+	//  			return err
+	//  		}
+	//  		select {
+	//  		case <-ctx.Done():
+	//  			return ctx.Err()
+	//  		case out <- v:
+	//  		}
+	//  	}
+
+	// todo(nl5887): lock old file
+	// todo(nl5887): lock new file
+	fmt.Printf("Rename %#v\n", *req)
+
+	tx, err := dir.mfs.db.Begin(true)
+	if err != nil {
+		return err
+	}
+
+	defer tx.Rollback()
+
+	b := dir.bucket(tx)
+
+	newDir := nd.(*Dir)
+
+	var o interface{}
+	if err := b.Get(req.OldName, &o); err != nil {
+		return err
+	} else if file, ok := o.(File); ok {
+		file.dir = dir
+
+		oldPath := file.FullPath()
+
+		file.Path = req.NewName
+		file.dir = newDir
+
+		sr := MoveOperation{
+			Source: oldPath,
+			Target: file.FullPath(),
+			Operation: Operation{
+				Error: make(chan error),
+			},
+		}
+
+		if err := dir.mfs.sync(&sr); meta.IsNoSuchObject(err) {
+			return fuse.ENOENT
+		} else if err != nil {
+			return err
+		}
+
+		// we'll wait for the request to be uploaded and synced, before
+		// releasing the file
+		if err := <-sr.Error; err != nil {
+			return err
+		}
+
+		if err := file.store(tx); err != nil {
+			return err
+		}
+
+	} else if _, ok := o.(Dir); ok {
+		doneCh := make(chan struct{})
+		defer close(doneCh)
+
+		oldPath := path.Join(dir.FullPath(), req.OldName)
+
+		// implement abort
+
+		// todo(nl5887): should we queue operations, so it
+		// will live restart?
+
+		ch := dir.mfs.api.ListObjectsV2(dir.mfs.config.bucket, oldPath+"/", true, doneCh)
+		for message := range ch {
+			newPath := path.Join(newDir.FullPath(), req.NewName, message.Key[len(oldPath):])
+
+			sr := MoveOperation{
+				Source: message.Key,
+				Target: newPath,
+				Operation: Operation{
+					Error: make(chan error),
+				},
+			}
+
+			if err := dir.mfs.sync(&sr); meta.IsNoSuchObject(err) {
+				return fuse.ENOENT
+			} else if err != nil {
+				return err
+			}
+
+			// we'll wait for the request to be uploaded and synced, before
+			// releasing the file
+			if err := <-sr.Error; err != nil {
+				return err
+			}
+		}
+
+		// scan new folder will be done automatically, by lookup
+		// in case a move has been aborted, the scan
+		// will fix this
+
+		/*
+			if err := newDir.scan(); err != nil {
+				return err
+			}
+
+		*/
+		// deadlock with scan
+		/*
+			if err := dir.scan(); err != nil {
+				return err
+			}
+		*/
+
+		return nil
+	} else {
+		return fuse.ENOSYS
+	}
+
+	// Commit the transaction and check for error.
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}

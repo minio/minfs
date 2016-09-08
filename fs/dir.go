@@ -489,9 +489,9 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 
 	fh.dirty = true
 
-	if f, err := os.Create(fh.cachePath); err == nil {
+	if f, err := os.OpenFile(fh.cachePath, int(req.Flags), dir.mfs.config.mode); err == nil {
 		fh.File = f
-	} else if err != nil {
+	} else {
 		return nil, nil, err
 	}
 

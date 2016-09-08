@@ -377,6 +377,26 @@ type PutOperation struct {
 	Target string
 }
 
+func NewSizedLimitedReader(r io.Reader, length int64) io.Reader {
+	return &SizedLimitedReader{
+		LimitedReader: &io.LimitedReader{
+			R: r,
+			N: length,
+		},
+		length: length,
+	}
+
+}
+
+type SizedLimitedReader struct {
+	*io.LimitedReader
+	length int64
+}
+
+func (slr *SizedLimitedReader) Size() int64 {
+	return slr.length
+}
+
 func (mfs *MinFS) sync(req interface{}) error {
 	mfs.syncChan <- req
 	return nil
@@ -413,13 +433,14 @@ func (mfs *MinFS) startSync() error {
 				// the limited reader will cause truncated files
 				// to be uploaded truncated. The file size is the actual file size,
 				// the cache file could not be truncated yet
-				lr := &io.LimitedReader{
-					R: r,
-					N: req.Length,
-				}
+				// the SizedLimitedReader ensures that a Content-Length will be sent,
+				// otherwise files with size 0 will not be uploaded
+				slr := NewSizedLimitedReader(r, req.Length)
 
-				_, err = mfs.api.PutObject(mfs.config.bucket, req.Target, lr, "application/octet-stream")
+				_, err = mfs.api.PutObject(mfs.config.bucket, req.Target, slr, "application/octet-stream")
 				if err != nil {
+					fmt.Printf("%#v: %s\n", req, err.Error())
+
 					req.Error <- err
 					return
 				}

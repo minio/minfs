@@ -181,15 +181,6 @@ func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.Op
 		fh = v
 	}
 
-	// todo(nl5887): cleanup
-	object, err := file.mfs.api.GetObject(file.mfs.config.bucket, file.RemotePath())
-	if err != nil /* todo(nl5887): No such object*/ {
-		return nil, fuse.ENOENT
-	} else if err != nil {
-		return nil, err
-	}
-	defer object.Close()
-
 	// Start a writable transaction.
 	tx, err := file.mfs.db.Begin(true)
 	if err != nil {
@@ -198,30 +189,59 @@ func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.Op
 
 	defer tx.Rollback()
 
-	hasher := sha256.New()
+	fmt.Printf("OPEN FLAGS %#v\n", req.Flags.String())
 
-	var r io.Reader = object
-	r = io.TeeReader(r, hasher)
+	if req.Flags&fuse.OpenTruncate == fuse.OpenTruncate {
+		fmt.Println("TRUNCATE")
+		if f, err := os.OpenFile(fh.cachePath, int(req.Flags), file.mfs.config.mode); err != nil {
+			return nil, err
+		} else {
+			fh.File = f
 
-	f, err := os.Create(fh.cachePath)
-	if err != nil {
-		return nil, err
-	}
-
-	defer f.Close()
-
-	if size, err := io.Copy(f, r); err != nil {
-		return nil, err
+			file.Size = 0
+		}
 	} else {
-		file.Size = uint64(size)
+		// todo(nl5887): cleanup
+		object, err := file.mfs.api.GetObject(file.mfs.config.bucket, file.RemotePath())
+		if err != nil /* todo(nl5887): No such object*/ {
+			return nil, fuse.ENOENT
+		} else if err != nil {
+			return nil, err
+		}
+		defer object.Close()
+
+		hasher := sha256.New()
+
+		var r io.Reader = object
+		r = io.TeeReader(r, hasher)
+
+		f, err := os.Create(fh.cachePath)
+		if err != nil {
+			return nil, err
+		}
+
+		defer f.Close()
+
+		if size, err := io.Copy(f, r); err != nil {
+			return nil, err
+		} else {
+			// update file size
+			file.Size = uint64(size)
+		}
+
+		// todo(nl5887): do we want to save as hashes? this will deduplicate files in cache file
+		// and also introduces some kind of versioning, hasher can be saved in filehandle
+		// we only don't have the hashes being returned at the time from the storage
+		fmt.Printf("Sum: %#v\n", hasher.Sum(nil))
+
+		file.Hash = hasher.Sum(nil)
+
+		if f, err := os.OpenFile(fh.cachePath, int(req.Flags), file.mfs.config.mode); err != nil {
+			return nil, err
+		} else {
+			fh.File = f
+		}
 	}
-
-	// todo(nl5887): do we want to save as hashes? this will deduplicate files in cache file
-	// and also introduces some kind of versioning, hasher can be saved in filehandle
-	// we only don't have the hashes being returned at the time from the storage
-	fmt.Printf("Sum: %#v\n", hasher.Sum(nil))
-
-	file.Hash = hasher.Sum(nil)
 
 	if err := file.store(tx); err != nil {
 		return nil, err
@@ -230,12 +250,6 @@ func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.Op
 	// Commit the transaction and check for error.
 	if err := tx.Commit(); err != nil {
 		return nil, err
-	}
-
-	if f, err := os.OpenFile(fh.cachePath, int(req.Flags), file.mfs.config.mode); err != nil {
-		return nil, err
-	} else {
-		fh.File = f
 	}
 
 	resp.Handle = fuse.HandleID(fh.handle)
@@ -265,8 +279,6 @@ func (file *File) Getattr(ctx context.Context, req *fuse.GetattrRequest, resp *f
 		Gid:    file.GID,
 		Flags:  file.Flags,
 	}
-
-	fmt.Printf("Getattr %#v\n", resp.Attr)
 
 	return nil
 }

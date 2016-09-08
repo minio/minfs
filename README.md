@@ -65,7 +65,7 @@ completely uploaded it will be unlocked.
 
 ## Locking
 
-The locking mechanism is very basic, only one operation is allowed at a time. This prevents
+The locking mechanism is very defensive, only one operation is allowed at a time. This prevents
 issues with synchronization and keeps the fuse driver simple.
 
 ## Frequently asked questions
@@ -76,6 +76,18 @@ issues with synchronization and keeps the fuse driver simple.
 
 We've added a sleep to the upload, this allows us to test the locking mechanism.
 
+## Scenarios
+
+* create a file
+* append to a file
+* make directory
+* remove empty directory 
+* remove directory with contents
+* rename file
+* move file into different directory
+* move directory with contents
+* check locked file
+
 ## Todo
 
 There is a long list of todos:
@@ -85,6 +97,7 @@ There is a long list of todos:
 * use Minio notifications to actively update metadata 
 * one mountpoint per bucket
 * each mountpoint will have its own cache folders and can be mounted to one bucket
-* implement rename files
-* implement mkdir 
 * use minio configs? .minfs file for keys?
+* implement encryption support, (a)symmetric
++ implement base path
+* implement support for cancel context

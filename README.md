@@ -17,6 +17,8 @@ The following features are roughly working at the moment:
 * open and read files
 * create new files (not being uploaded to storage yet, only cache)
 * modify existing files (not being uploaded to storage yet, only cache)
+* move and rename of files
+* upload of files
 * delete files
 * change permissions
 
@@ -101,3 +103,4 @@ There is a long list of todos:
 * implement encryption support, (a)symmetric
 + implement base path
 * implement support for cancel context
+* mount readonly?

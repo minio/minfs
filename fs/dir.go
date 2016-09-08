@@ -17,7 +17,7 @@ import (
 type Dir struct {
 	mfs *MinFS
 
-	parent *Dir
+	dir *Dir
 
 	Path  string
 	Inode uint64
@@ -69,6 +69,9 @@ func (dir *Dir) Attr(ctx context.Context, a *fuse.Attr) error {
 // Lookup returns the directory node
 func (dir *Dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
 	// todo(nl5887): implenent abort
+	// stat object?
+
+	// todo(nl5887): only scan when not scanned. or when scan has expired
 
 	// todo: make sure that we know of the folder, when not yet initialized
 	if err := dir.scan(ctx); err != nil {
@@ -80,7 +83,7 @@ func (dir *Dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
 		b := dir.bucket(tx)
 		return b.Get(name, &o)
 	}); err == nil {
-	} else if true /* todo(nl5887): check for no such object */ {
+	} else if meta.IsNoSuchObject(err) {
 		return nil, fuse.ENOENT
 	} else if err != nil {
 		return nil, err
@@ -92,7 +95,7 @@ func (dir *Dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
 		return &file, nil
 	} else if subdir, ok := o.(Dir); ok {
 		subdir.mfs = dir.mfs
-		subdir.parent = dir
+		subdir.dir = dir
 		return &subdir, nil
 	}
 
@@ -116,7 +119,7 @@ func (dir *Dir) FullPath() string {
 
 		fullPath = path.Join(p.Path, fullPath)
 
-		p = p.parent
+		p = p.dir
 	}
 
 	fmt.Println(fullPath)
@@ -141,11 +144,18 @@ func (dir *Dir) scan(ctx context.Context) error {
 	prefix := dir.RemotePath()
 	prefix = prefix + "/"
 
-	// todo(nl5887): remove deleted objects still in cache
+	fmt.Println("Scan", prefix)
 
 	objects := map[string]interface{}{}
 
 	if err := b.ForEach(func(k string, o interface{}) error {
+		// ignore buckets
+		fmt.Println(k, k[len(k)-1])
+		if k[len(k)-1] == '/' {
+			fmt.Println("Ignore Bucket", k)
+			return nil
+		}
+
 		objects[k] = o
 		return nil
 	}); err != nil {
@@ -154,26 +164,32 @@ func (dir *Dir) scan(ctx context.Context) error {
 
 	ch := dir.mfs.api.ListObjectsV2(dir.mfs.config.bucket, prefix, false, doneCh)
 	for message := range ch {
-		key := path.Base(message.Key)
+		key := message.Key[len(prefix):]
+
+		fmt.Println(key)
 
 		// object still exists
-		objects[key] = nil
+		objects[path.Base(key)] = nil
 
 		if strings.HasSuffix(key, "/") {
 			var d Dir
-			if err := b.Get(key, &d); err == nil {
-				d.parent = dir
+			if err := b.Get(path.Base(key), &d); err == nil {
+				fmt.Println("Test1", key)
+				d.dir = dir
 				d.mfs = dir.mfs
 			} else if !meta.IsNoSuchObject(err) {
+				fmt.Println("Test2", key)
 				return err
 			} else if i, err := dir.mfs.NextSequence(tx); err != nil {
+				fmt.Println("Test3", key)
 				return err
 			} else {
+				fmt.Println("Test4", key)
 				// todo(nl5887): check if we need to update, and who'll win?
 				d = Dir{
-					parent: dir,
+					dir: dir,
 
-					Path:  key,
+					Path:  path.Base(key),
 					Inode: i,
 
 					Mode: 0770 | os.ModeDir,
@@ -188,14 +204,14 @@ func (dir *Dir) scan(ctx context.Context) error {
 
 			}
 
+			fmt.Printf("%s %#v\n", key, d)
+
 			if err := d.store(tx); err != nil {
 				return err
 			}
-
-			objects[key] = d
 		} else {
 			var f File
-			if err := b.Get(key, &f); err == nil {
+			if err := b.Get(path.Base(key), &f); err == nil {
 				f.dir = dir
 				f.mfs = dir.mfs
 
@@ -225,7 +241,7 @@ func (dir *Dir) scan(ctx context.Context) error {
 				// todo(nl5887): check if we need to update, and who'll win?
 				f = File{
 					dir:  dir,
-					Path: key,
+					Path: path.Base(key),
 
 					Size:    uint64(message.Size),
 					Inode:   i,
@@ -252,6 +268,8 @@ func (dir *Dir) scan(ctx context.Context) error {
 		if o == nil {
 			continue
 		}
+
+		fmt.Println("DELETE", k)
 
 		b.Delete(k)
 
@@ -292,7 +310,7 @@ func (dir *Dir) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 			file.dir = dir
 			entries = append(entries, file.Dirent())
 		} else if subdir, ok := o.(Dir); ok {
-			subdir.parent = dir
+			subdir.dir = dir
 			entries = append(entries, subdir.Dirent())
 		} else {
 			panic("Could not find type. Try to remove cache.")
@@ -308,19 +326,19 @@ func (dir *Dir) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 
 func (dir *Dir) bucket(tx *meta.Tx) *meta.Bucket {
 	// root
-	if dir.parent == nil {
+	if dir.dir == nil {
 		return tx.Bucket("minio/")
 	}
 
-	b := dir.parent.bucket(tx)
+	b := dir.dir.bucket(tx)
 	return b.Bucket(dir.Path + "/")
 }
 
 // Mkdir will make a new directory below current dir
 func (dir *Dir) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, error) {
 	subdir := Dir{
-		parent: dir,
-		mfs:    dir.mfs,
+		dir: dir,
+		mfs: dir.mfs,
 
 		Path: req.Name,
 
@@ -415,7 +433,7 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 
 func (dir *Dir) store(tx *meta.Tx) error {
 	// directories will be stored in their parent buckets
-	b := dir.parent.bucket(tx)
+	b := dir.dir.bucket(tx)
 
 	subbucketPath := path.Base(dir.Path)
 	if _, err := b.CreateBucketIfNotExists(subbucketPath + "/"); err != nil {
@@ -452,6 +470,7 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 
 	var f File
 	if err := b.Get(name, &f); err == nil {
+		f.mfs = dir.mfs
 		f.dir = dir
 	} else if i, err := dir.mfs.NextSequence(tx); err != nil {
 		return nil, nil, err
@@ -489,6 +508,7 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 
 	fh.dirty = true
 
+	fmt.Println("Create", req.Flags.String())
 	if f, err := os.OpenFile(fh.cachePath, int(req.Flags), dir.mfs.config.mode); err == nil {
 		fh.File = f
 	} else {
@@ -545,10 +565,11 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 		file.Path = req.NewName
 		file.dir = newDir
 
+		// todo(nl5887): make function
 		sr := MoveOperation{
 			Source: oldPath,
 			Target: file.RemotePath(),
-			Operation: Operation{
+			Operation: &Operation{
 				Error: make(chan error),
 			},
 		}
@@ -584,10 +605,11 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 		for message := range ch {
 			newPath := path.Join(newDir.RemotePath(), req.NewName, message.Key[len(oldPath):])
 
+			// todo(nl5887): make function
 			sr := MoveOperation{
 				Source: message.Key,
 				Target: newPath,
-				Operation: Operation{
+				Operation: &Operation{
 					Error: make(chan error),
 				},
 			}

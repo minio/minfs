@@ -65,23 +65,27 @@ func (fh *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) err
 		return err
 	}
 
-	defer func() {
-		fh.f.mfs.Release(fh)
+	defer fh.f.mfs.Release(fh)
 
-		os.Remove(fh.cachePath)
-	}()
+	os.Remove(fh.cachePath)
+	return nil
+}
 
+// experimenting with uploading at flush, this slows operations down till it has been
+// completely flushed
+func (fh *FileHandle) Flush(ctx context.Context, req *fuse.FlushRequest) error {
 	if !fh.dirty {
 		return nil
 	}
 
+	// todo(nl5887): create function
 	sr := PutOperation{
 		Source: fh.Name(),
 		Target: fh.f.RemotePath(),
 
 		Length: int64(fh.f.Size),
 
-		Operation: Operation{
+		Operation: &Operation{
 			Error: make(chan error),
 		},
 	}
@@ -105,6 +109,8 @@ func (fh *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) err
 
 	defer tx.Rollback()
 
+	fmt.Printf("%#v\n", *fh)
+	fmt.Printf("%#v\n", *fh.f)
 	if err := fh.f.store(tx); err != nil {
 		return err
 	}
@@ -114,10 +120,7 @@ func (fh *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) err
 		return err
 	}
 
-	// todo(nl5887): delete cache file
-	return nil
-}
+	fh.dirty = false
 
-func (fh *FileHandle) Flush(ctx context.Context, req *fuse.FlushRequest) error {
-	return fh.File.Sync()
+	return nil
 }

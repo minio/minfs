@@ -155,6 +155,14 @@ func (f *File) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse
 	return nil
 }
 
+// Lookup returns the directory node
+func (file *File) Lookup(ctx context.Context, name string) (fs.Node, error) {
+	// todo(nl5887): implenent abort
+	// todo(nl5887): stat object?
+	panic("STAT")
+	return nil, nil
+}
+
 func (file *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) error {
 	return nil
 }

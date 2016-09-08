@@ -121,6 +121,14 @@ func (mfs *MinFS) stopNotificationListener() error {
 	return nil
 }
 
+func (mfs *MinFS) updateMetadata() error {
+	for {
+		// updates metadata periodically. This is being used when notification listener
+		// is not available
+		time.Sleep(time.Second * 1)
+	}
+}
+
 func (mfs *MinFS) startNotificationListener() error {
 	// try to set and listen for notifications
 	// Fetch the bucket location.
@@ -355,21 +363,21 @@ type Operation struct {
 }
 
 type MoveOperation struct {
-	Operation
+	*Operation
 
 	Source string
 	Target string
 }
 
 type CopyOperation struct {
-	Operation
+	*Operation
 
 	Source string
 	Target string
 }
 
 type PutOperation struct {
-	Operation
+	*Operation
 
 	Length int64
 
@@ -405,6 +413,8 @@ func (mfs *MinFS) sync(req interface{}) error {
 func (mfs *MinFS) startSync() error {
 	go func() {
 		for req := range mfs.syncChan {
+			// todo(nl5887): do we want retries?
+
 			switch req := req.(type) {
 			case *MoveOperation:
 				if err := mfs.api.CopyObject(mfs.config.bucket, req.Target, path.Join(mfs.config.bucket, req.Source), minio.NewCopyConditions()); err != nil {
@@ -473,6 +483,15 @@ func (mfs *MinFS) Acquire(f *File) (*FileHandle, error) {
 	mfs.m.Lock()
 	defer mfs.m.Unlock()
 
+	/*
+		new locking strategy {
+		    mfs.locks = map[string]sync.Mutex{}
+
+		    futex?
+		    mfs.locks
+		}
+	*/
+
 	// generate unique cache path
 	cachePath := ""
 	if v, err := mfs.NewCachePath(); err != nil {
@@ -516,7 +535,7 @@ func (mfs *MinFS) NextSequence(tx *meta.Tx) (sequence uint64, err error) {
 // Root is the root folder of the MinFS mountpoint
 func (mfs *MinFS) Root() (fs.Node, error) {
 	return &Dir{
-		parent: nil,
+		dir: nil,
 
 		mfs:  mfs,
 		Mode: os.ModeDir | 0555,

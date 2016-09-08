@@ -139,17 +139,26 @@ func (dir *Dir) scan() error {
 
 	// todo(nl5887): remove deleted objects still in cache
 
+	objects := map[string]interface{}{}
+
+	if err := b.ForEach(func(k string, o interface{}) error {
+		objects[k] = o
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	ch := dir.mfs.api.ListObjectsV2(dir.mfs.config.bucket, prefix, false, doneCh)
 	for message := range ch {
-		key := message.Key
+		key := path.Base(message.Key)
 
-		fmt.Println("scan", key)
+		// object still exists
+		objects[key] = nil
 
 		if strings.HasSuffix(key, "/") {
-			// todo(nl5887): remove "/"
-
 			var d Dir
 			if err := b.Get(key, &d); err == nil {
+				// todo(nl5887): should update metadata here
 			} else if !meta.IsNoSuchObject(err) {
 				return err
 			} else if i, err := dir.mfs.NextSequence(tx); err != nil {
@@ -159,7 +168,7 @@ func (dir *Dir) scan() error {
 				d = Dir{
 					parent: dir,
 
-					Path:  path.Base(key),
+					Path:  key,
 					Inode: i,
 
 					Mode: 0770 | os.ModeDir,
@@ -176,6 +185,8 @@ func (dir *Dir) scan() error {
 					return err
 				}
 			}
+
+			objects[key] = d
 		} else {
 			var f File
 			if err := b.Get(key, &f); err == nil {
@@ -187,7 +198,7 @@ func (dir *Dir) scan() error {
 				// todo(nl5887): check if we need to update, and who'll win?
 				f = File{
 					dir:  dir,
-					Path: path.Base(key),
+					Path: key,
 
 					Size:    uint64(message.Size),
 					Inode:   i,
@@ -205,6 +216,19 @@ func (dir *Dir) scan() error {
 					return err
 				}
 			}
+		}
+	}
+
+	// cleanup cache
+	for k, o := range objects {
+		if o == nil {
+			continue
+		}
+
+		b.Delete(k)
+
+		if _, ok := o.(Dir); ok {
+			b.DeleteBucket(k + "/")
 		}
 	}
 

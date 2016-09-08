@@ -41,13 +41,6 @@ type Config struct {
 	mode os.FileMode
 }
 
-// Bucket option for Config
-func Bucket(name string) func(*Config) {
-	return func(cfg *Config) {
-		cfg.bucket = name
-	}
-}
-
 // Mountpoint configures the target mountpoint
 func Mountpoint(mountpoint string) func(*Config) {
 	return func(cfg *Config) {
@@ -55,7 +48,7 @@ func Mountpoint(mountpoint string) func(*Config) {
 	}
 }
 
-// Bucket option for Config
+// Target url target option for Config
 func Target(target string) func(*Config) {
 	return func(cfg *Config) {
 		if u, err := url.Parse(target); err == nil {
@@ -74,40 +67,42 @@ func Target(target string) func(*Config) {
 	}
 }
 
-// Bucket option for Config
+// CacheDir - cache directory path option for Config
 func CacheDir(path string) func(*Config) {
 	return func(cfg *Config) {
 		cfg.cache = path
 	}
 }
 
-// Bucket option for Config
+// CacheSize - total cache size option for Config
 func CacheSize(size uint64) func(*Config) {
 	return func(cfg *Config) {
 		cfg.cacheSize = size
 	}
 }
 
-// Gid Bucket option for Config
-func Gid(gid uint32) func(*Config) {
+// SetGID - sets a custom gid for the mount.
+func SetGID(gid uint32) func(*Config) {
 	return func(cfg *Config) {
 		cfg.gid = gid
 	}
 }
 
-// Uid Bucket option for Config
-func Uid(uid uint32) func(*Config) {
+// SetUID - sets a custom uid for the mount.
+func SetUID(uid uint32) func(*Config) {
 	return func(cfg *Config) {
 		cfg.uid = uid
 	}
 }
 
+// Debug - enables debugging.
 func Debug() func(*Config) {
 	return func(cfg *Config) {
 		cfg.debug = true
 	}
 }
 
+// Validates the config for sane values.
 func (cfg *Config) validate() error {
 	// check if mountpoint exists
 	if cfg.mountpoint == "" {

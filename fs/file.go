@@ -44,37 +44,41 @@ type File struct {
 	Hash []byte
 }
 
-func (file *File) store(tx *meta.Tx) error {
-	b := file.bucket(tx)
-	return b.Put(path.Base(file.Path), file)
+func (f *File) store(tx *meta.Tx) error {
+	b := f.bucket(tx)
+	return b.Put(path.Base(f.Path), f)
 }
 
-func (file *File) Forget() {
+// Forget - forgets the fd.
+func (f *File) Forget() {
+	// TODO: should this be implemented? @y4m4
 	fmt.Println("Forget")
 }
 
-func (file *File) Attr(ctx context.Context, a *fuse.Attr) error {
+// Attr - attr file context.
+func (f *File) Attr(ctx context.Context, a *fuse.Attr) error {
 	*a = fuse.Attr{
-		Inode: file.Inode,
-		Size:  file.Size,
+		Inode: f.Inode,
+		Size:  f.Size,
 		/*
 		   Blocks    :file.Size / 512,
 		   Nlink     : 1,
 		   BlockSize : 512,
 		*/
-		Atime:  file.Atime,
-		Mtime:  file.Mtime,
-		Ctime:  file.Chgtime,
-		Crtime: file.Crtime,
-		Mode:   file.Mode,
-		Uid:    file.UID,
-		Gid:    file.GID,
-		Flags:  file.Flags,
+		Atime:  f.Atime,
+		Mtime:  f.Mtime,
+		Ctime:  f.Chgtime,
+		Crtime: f.Crtime,
+		Mode:   f.Mode,
+		Uid:    f.UID,
+		Gid:    f.GID,
+		Flags:  f.Flags,
 	}
 
 	return nil
 }
 
+// Setattr - set attribute.
 func (f *File) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse.SetattrResponse) error {
 	tx, err := f.mfs.db.Begin(true)
 	if err != nil {
@@ -156,41 +160,45 @@ func (f *File) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse
 }
 
 // Lookup returns the directory node
-func (file *File) Lookup(ctx context.Context, name string) (fs.Node, error) {
+func (f *File) Lookup(ctx context.Context, name string) (fs.Node, error) {
 	// todo(nl5887): implenent abort
 	// todo(nl5887): stat object?
 	panic("STAT")
 	return nil, nil
 }
 
-func (file *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) error {
+// Fsync -
+func (f *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) error {
 	return nil
 }
 
-func (file *File) RemotePath() string {
-	return path.Join(file.dir.RemotePath(), file.Path)
+// RemotePath -
+func (f *File) RemotePath() string {
+	return path.Join(f.dir.RemotePath(), f.Path)
 }
 
-func (file *File) FullPath() string {
-	return path.Join(file.dir.FullPath(), file.Path)
+// FullPath -
+func (f *File) FullPath() string {
+	return path.Join(f.dir.FullPath(), f.Path)
 }
 
-func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (fs.Handle, error) {
-	if err := file.dir.wait(file.Path); err != nil {
+// Open -
+func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (fs.Handle, error) {
+	if err := f.dir.wait(f.Path); err != nil {
 		return nil, err
 	}
 
 	// check req.Flags, if open for writing and already open,
 	// then deny. Now we're only allowing single open files.
 	var fh *FileHandle
-	if v, err := file.mfs.Acquire(file); err != nil {
+	if v, err := f.mfs.Acquire(f); err != nil {
 		return nil, err
 	} else {
 		fh = v
 	}
 
 	// Start a writable transaction.
-	tx, err := file.mfs.db.Begin(true)
+	tx, err := f.mfs.db.Begin(true)
 	if err != nil {
 		return nil, err
 	}
@@ -201,16 +209,15 @@ func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.Op
 
 	if req.Flags&fuse.OpenTruncate == fuse.OpenTruncate {
 		fmt.Println("TRUNCATE")
-		if f, err := os.OpenFile(fh.cachePath, int(req.Flags), file.mfs.config.mode); err != nil {
+		if file, err := os.OpenFile(fh.cachePath, int(req.Flags), f.mfs.config.mode); err != nil {
 			return nil, err
 		} else {
-			fh.File = f
-
-			file.Size = 0
+			fh.File = file
+			f.Size = 0
 		}
 	} else {
 		// todo(nl5887): cleanup
-		object, err := file.mfs.api.GetObject(file.mfs.config.bucket, file.RemotePath())
+		object, err := f.mfs.api.GetObject(f.mfs.config.bucket, f.RemotePath())
 		if err != nil /* todo(nl5887): No such object*/ {
 			return nil, fuse.ENOENT
 		} else if err != nil {
@@ -223,18 +230,18 @@ func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.Op
 		var r io.Reader = object
 		r = io.TeeReader(r, hasher)
 
-		f, err := os.Create(fh.cachePath)
+		file, err := os.Create(fh.cachePath)
 		if err != nil {
 			return nil, err
 		}
 
-		defer f.Close()
+		defer file.Close()
 
-		if size, err := io.Copy(f, r); err != nil {
+		if size, err := io.Copy(file, r); err != nil {
 			return nil, err
 		} else {
 			// update file size
-			file.Size = uint64(size)
+			f.Size = uint64(size)
 		}
 
 		// todo(nl5887): do we want to save as hashes? this will deduplicate files in cache file
@@ -242,16 +249,16 @@ func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.Op
 		// we only don't have the hashes being returned at the time from the storage
 		fmt.Printf("Sum: %#v\n", hasher.Sum(nil))
 
-		file.Hash = hasher.Sum(nil)
+		f.Hash = hasher.Sum(nil)
 
-		if f, err := os.OpenFile(fh.cachePath, int(req.Flags), file.mfs.config.mode); err != nil {
+		if file, err := os.OpenFile(fh.cachePath, int(req.Flags), f.mfs.config.mode); err != nil {
 			return nil, err
 		} else {
-			fh.File = f
+			fh.File = file
 		}
 	}
 
-	if err := file.store(tx); err != nil {
+	if err := f.store(tx); err != nil {
 		return nil, err
 	}
 
@@ -264,35 +271,37 @@ func (file *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.Op
 	return fh, nil
 }
 
-func (file *File) bucket(tx *meta.Tx) *meta.Bucket {
-	b := file.dir.bucket(tx)
+func (f *File) bucket(tx *meta.Tx) *meta.Bucket {
+	b := f.dir.bucket(tx)
 	return b
 }
 
-func (file *File) Getattr(ctx context.Context, req *fuse.GetattrRequest, resp *fuse.GetattrResponse) error {
+// Getattr -
+func (f *File) Getattr(ctx context.Context, req *fuse.GetattrRequest, resp *fuse.GetattrResponse) error {
 	resp.Attr = fuse.Attr{
-		Inode: file.Inode,
-		Size:  file.Size,
+		Inode: f.Inode,
+		Size:  f.Size,
 		/*
 		   Blocks    :file.Size / 512,
 		   Nlink     : 1,
 		   BlockSize : 512,
 		*/
-		Atime:  file.Atime,
-		Mtime:  file.Mtime,
-		Ctime:  file.Chgtime,
-		Crtime: file.Crtime,
-		Mode:   file.Mode,
-		Uid:    file.UID,
-		Gid:    file.GID,
-		Flags:  file.Flags,
+		Atime:  f.Atime,
+		Mtime:  f.Mtime,
+		Ctime:  f.Chgtime,
+		Crtime: f.Crtime,
+		Mode:   f.Mode,
+		Uid:    f.UID,
+		Gid:    f.GID,
+		Flags:  f.Flags,
 	}
 
 	return nil
 }
 
-func (file *File) Dirent() fuse.Dirent {
+// Dirent -
+func (f *File) Dirent() fuse.Dirent {
 	return fuse.Dirent{
-		Inode: file.Inode, Name: path.Base(file.Path), Type: fuse.DT_File,
+		Inode: f.Inode, Name: path.Base(f.Path), Type: fuse.DT_File,
 	}
 }

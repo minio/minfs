@@ -211,7 +211,7 @@ func (mfs *MinFS) startNotificationListener() error {
 
 				var f interface{}
 				if err := b.Get(key, &f); err == nil {
-				} else if !meta.IsNoSuchObject(err) {
+				} else if err != meta.ErrNoSuchObject {
 					fmt.Println("Error:", err)
 					continue
 				} else if i, err := mfs.NextSequence(tx); err != nil {
@@ -295,9 +295,9 @@ func (mfs *MinFS) Serve() error {
 	fmt.Println("Initializing minio client...")
 
 	host := mfs.config.target.Host
-	access := mfs.config.target.User.Username()
-	secret, _ := mfs.config.target.User.Password()
-	secure := (mfs.config.target.Scheme == "https")
+	access := os.Getenv("MINFS_ACCESS")
+	secret := os.Getenv("MINFS_SECRET")
+	secure := mfs.config.target.Scheme == "https"
 	if api, err := minio.New(host, access, secret, secure); err != nil {
 		return err
 	} else {
@@ -358,10 +358,12 @@ loop:
 	return nil
 }
 
+// Operation -
 type Operation struct {
 	Error chan error
 }
 
+// MoveOperation -
 type MoveOperation struct {
 	*Operation
 
@@ -369,6 +371,7 @@ type MoveOperation struct {
 	Target string
 }
 
+// CopyOperation -
 type CopyOperation struct {
 	*Operation
 
@@ -376,6 +379,7 @@ type CopyOperation struct {
 	Target string
 }
 
+// PutOperation -
 type PutOperation struct {
 	*Operation
 
@@ -512,6 +516,7 @@ func (mfs *MinFS) Acquire(f *File) (*FileHandle, error) {
 	return h, nil
 }
 
+// IsLocked -
 func (mfs *MinFS) IsLocked(path string) bool {
 	for _, fh := range mfs.handles {
 		if fh == nil {
@@ -543,10 +548,12 @@ func (mfs *MinFS) Root() (fs.Node, error) {
 	}, nil
 }
 
+// Storer -
 type Storer interface {
 	store(tx *meta.Tx)
 }
 
+// NewCachePath -
 func (mfs *MinFS) NewCachePath() (string, error) {
 	cachePath := path.Join(mfs.config.cache, nextSuffix())
 	for {
@@ -556,7 +563,6 @@ func (mfs *MinFS) NewCachePath() (string, error) {
 		} else {
 			return "", err
 		}
-
 		cachePath = path.Join(mfs.config.cache, nextSuffix())
 	}
 }

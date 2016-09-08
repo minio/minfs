@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+// Package queue implements a generic queue.
 package queue
 
 import (
@@ -41,7 +43,7 @@ type Queue struct {
 	closed bool
 }
 
-// NewQueue creates a new queue
+// New creates a new queue
 func New() *Queue {
 	return &Queue{
 		idleCh: make(chan interface{}),

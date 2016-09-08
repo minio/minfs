@@ -37,8 +37,16 @@ $ ln -s /usr/bin/minfs /usr/sbin/mount.minfs
 
 ## Mount
 
+### Authenticated
+
 ```
-$ mount -t minfs -o gid=0,uid=0,cache=./cache/ http://{access key}:{secret key}@172.16.84.1:9000/asiatrip /hello
+$ MINFS_ACCESS=... MINFS_SECRET=... mount -t minfs -o gid=0,uid=0,cache=./cache/ http://172.16.84.1:9000/asiatrip /hello
+```
+
+### Anonymous
+
+```
+$ mount -t minfs -o gid=0,uid=0,cache=./cache/ http://172.16.84.1:9000/asiatrip /hello
 ```
 
 ## Unmount

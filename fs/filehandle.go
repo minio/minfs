@@ -9,6 +9,7 @@ import (
 	"golang.org/x/net/context"
 )
 
+// FileHandle -
 type FileHandle struct {
 	*os.File
 
@@ -60,6 +61,7 @@ func (fh *FileHandle) Write(ctx context.Context, req *fuse.WriteRequest, resp *f
 	}
 }
 
+// Release -
 func (fh *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) error {
 	if err := fh.Close(); err != nil {
 		return err
@@ -71,7 +73,7 @@ func (fh *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) err
 	return nil
 }
 
-// experimenting with uploading at flush, this slows operations down till it has been
+// Flush - experimenting with uploading at flush, this slows operations down till it has been
 // completely flushed
 func (fh *FileHandle) Flush(ctx context.Context, req *fuse.FlushRequest) error {
 	if !fh.dirty {
@@ -121,6 +123,5 @@ func (fh *FileHandle) Flush(ctx context.Context, req *fuse.FlushRequest) error {
 	}
 
 	fh.dirty = false
-
 	return nil
 }

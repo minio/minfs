@@ -201,11 +201,8 @@ func (dir *Dir) scan(ctx context.Context) error {
 					Mtime:   message.LastModified,
 					Atime:   message.LastModified,
 				}
-
 			}
-
 			fmt.Printf("%s %#v\n", key, d)
-
 			if err := d.store(tx); err != nil {
 				return err
 			}
@@ -233,7 +230,7 @@ func (dir *Dir) scan(ctx context.Context) error {
 				if message.LastModified.After(f.Atime) {
 					f.Atime = message.LastModified
 				}
-			} else if !meta.IsNoSuchObject(err) {
+			} else if err != meta.ErrNoSuchObject {
 				return err
 			} else if i, err := dir.mfs.NextSequence(tx); err != nil {
 				return err
@@ -256,7 +253,6 @@ func (dir *Dir) scan(ctx context.Context) error {
 				}
 
 			}
-
 			if err := f.store(tx); err != nil {
 				return err
 			}
@@ -410,7 +406,7 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 	var o interface{}
 	if err := b.Get(req.Name, &o); err != nil {
 		return err
-	} else if meta.IsNoSuchObject(err) {
+	} else if err == meta.ErrNoSuchObject {
 		return fuse.ENOENT
 	} else if err := b.Delete(req.Name); err != nil {
 		return err
@@ -524,6 +520,7 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 	return &f, fh, nil
 }
 
+// Rename -
 func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node) error {
 	// todo(nl5887): implement cancel
 
@@ -574,7 +571,7 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 			},
 		}
 
-		if err := dir.mfs.sync(&sr); meta.IsNoSuchObject(err) {
+		if err := dir.mfs.sync(&sr); err == meta.ErrNoSuchObject {
 			return fuse.ENOENT
 		} else if err != nil {
 			return err
@@ -614,7 +611,7 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 				},
 			}
 
-			if err := dir.mfs.sync(&sr); meta.IsNoSuchObject(err) {
+			if err := dir.mfs.sync(&sr); err == meta.ErrNoSuchObject {
 				return fuse.ENOENT
 			} else if err != nil {
 				return err

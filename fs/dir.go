@@ -68,8 +68,10 @@ func (dir *Dir) Attr(ctx context.Context, a *fuse.Attr) error {
 
 // Lookup returns the directory node
 func (dir *Dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
+	// todo(nl5887): implenent abort
+
 	// todo: make sure that we know of the folder, when not yet initialized
-	if err := dir.scan(); err != nil {
+	if err := dir.scan(ctx); err != nil {
 		return nil, err
 	}
 
@@ -121,7 +123,9 @@ func (dir *Dir) FullPath() string {
 	return fullPath
 }
 
-func (dir *Dir) scan() error {
+func (dir *Dir) scan(ctx context.Context) error {
+	// todo(nl5887): implement done  / cancel
+
 	tx, err := dir.mfs.db.Begin(true)
 	if err != nil {
 		return err
@@ -237,9 +241,11 @@ func (dir *Dir) scan() error {
 
 // ReadDirAll will return all files in current dir
 func (dir *Dir) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
+	// todo(nl5887): implement abort
+
 	// if not exists then scan
 	// todo(nl5887): should we keep last scan date? do periodic scan to update cache?
-	if err := dir.scan(); err != nil {
+	if err := dir.scan(ctx); err != nil {
 		return nil, err
 	}
 

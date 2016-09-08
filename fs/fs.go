@@ -19,6 +19,7 @@ package minfs
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net/url"
 	"os"
@@ -370,6 +371,8 @@ type CopyOperation struct {
 type PutOperation struct {
 	Operation
 
+	Length int64
+
 	Source string
 	Target string
 }
@@ -407,7 +410,15 @@ func (mfs *MinFS) startSync() error {
 				}
 				defer r.Close()
 
-				_, err = mfs.api.PutObject(mfs.config.bucket, req.Target, r, "application/octet-stream")
+				// the limited reader will cause truncated files
+				// to be uploaded truncated. The file size is the actual file size,
+				// the cache file could not be truncated yet
+				lr := &io.LimitedReader{
+					R: r,
+					N: req.Length,
+				}
+
+				_, err = mfs.api.PutObject(mfs.config.bucket, req.Target, lr, "application/octet-stream")
 				if err != nil {
 					req.Error <- err
 					return

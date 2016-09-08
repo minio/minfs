@@ -78,6 +78,9 @@ func (fh *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) err
 	sr := PutOperation{
 		Source: fh.Name(),
 		Target: fh.f.RemotePath(),
+
+		Length: int64(fh.f.Size),
+
 		Operation: Operation{
 			Error: make(chan error),
 		},

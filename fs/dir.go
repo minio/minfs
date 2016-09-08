@@ -368,16 +368,9 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 	var o interface{}
 	if err := b.Get(req.Name, &o); err != nil {
 		return err
-	} else if f, ok := o.(*File); ok {
-		f.dir = dir
-	} else if d, ok := o.(*Dir); ok {
-		d.parent = dir
-	}
-
-	if err := b.Delete(req.Name); err == nil {
 	} else if meta.IsNoSuchObject(err) {
 		return fuse.ENOENT
-	} else if err != nil {
+	} else if err := b.Delete(req.Name); err != nil {
 		return err
 	}
 

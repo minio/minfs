@@ -21,7 +21,7 @@ type Operation struct {
 	Error chan error
 }
 
-// MoveOperation -
+// MoveOperation - Move source object to target object. Copy source to target, delete the source.
 type MoveOperation struct {
 	*Operation
 
@@ -29,7 +29,7 @@ type MoveOperation struct {
 	Target string
 }
 
-// CopyOperation -
+// CopyOperation - Copy source object to target.
 type CopyOperation struct {
 	*Operation
 
@@ -37,7 +37,7 @@ type CopyOperation struct {
 	Target string
 }
 
-// PutOperation -
+// PutOperation - Copy source file to target.
 type PutOperation struct {
 	*Operation
 

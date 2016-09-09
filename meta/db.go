@@ -46,6 +46,13 @@ func (db *DB) Begin(writable bool) (*Tx, error) {
 	return &Tx{tx}, err
 }
 
+// Update -
+func (db *DB) Update(fn func(*Tx) error) error {
+	return db.DB.Update(func(tx *bolt.Tx) error {
+		return fn(&Tx{tx})
+	})
+}
+
 // View -
 func (db *DB) View(fn func(*Tx) error) error {
 	return db.DB.View(func(tx *bolt.Tx) error {

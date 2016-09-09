@@ -30,7 +30,6 @@ type Config struct {
 	basePath string
 
 	cache      string
-	cacheSize  uint64
 	accountID  string
 	target     *url.URL
 	mountpoint string
@@ -71,13 +70,6 @@ func Target(target string) func(*Config) {
 func CacheDir(path string) func(*Config) {
 	return func(cfg *Config) {
 		cfg.cache = path
-	}
-}
-
-// CacheSize - total cache size option for Config
-func CacheSize(size uint64) func(*Config) {
-	return func(cfg *Config) {
-		cfg.cacheSize = size
 	}
 }
 

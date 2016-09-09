@@ -18,10 +18,8 @@
 package minfs
 
 import (
+	"context"
 	"fmt"
-	"io"
-	"log"
-	"net/url"
 	"os"
 	"os/signal"
 	"path"
@@ -29,7 +27,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/boltdb/bolt"
 	"github.com/minio/minfs/meta"
 	"github.com/minio/minfs/queue"
 	"github.com/minio/minio-go"
@@ -53,6 +50,8 @@ type MinFS struct {
 	// contains all open handles
 	handles []*FileHandle
 
+	locks map[string]bool
+
 	m sync.Mutex
 
 	queue *queue.Queue
@@ -60,14 +59,10 @@ type MinFS struct {
 	syncChan chan interface{}
 }
 
-// todo(nl5887): update cache with deleted files as well
-// todo(nl5887): mkdir
-
 // New will return a new MinFS client
 func New(options ...func(*Config)) (*MinFS, error) {
 	// set defaults
 	cfg := &Config{
-		cacheSize: 10000000,
 		cache:     "./cache/",
 		basePath:  "",
 		accountID: fmt.Sprintf("%d", time.Now().UTC().Unix()),
@@ -87,6 +82,7 @@ func New(options ...func(*Config)) (*MinFS, error) {
 	fs := &MinFS{
 		config:   cfg,
 		syncChan: make(chan interface{}),
+		locks:    map[string]bool{},
 	}
 
 	return fs, nil
@@ -130,139 +126,142 @@ func (mfs *MinFS) updateMetadata() error {
 }
 
 func (mfs *MinFS) startNotificationListener() error {
-	// try to set and listen for notifications
-	// Fetch the bucket location.
-	location, err := mfs.api.GetBucketLocation(mfs.config.bucket)
-	if err != nil {
-		return err
-	}
-
-	// Fetch any existing bucket notification on the bucket.
-	bn, err := mfs.api.GetBucketNotification(mfs.config.bucket)
-	if err != nil {
-		return err
-	}
-
-	accountARN := minio.NewArn("minio", "sns", location, mfs.config.accountID, "listen")
-
-	// If there are no SNS topics configured, configure the first one.
-	shouldSetNotification := len(bn.TopicConfigs) == 0
-	if !shouldSetNotification {
-		// We found previously configure SNS topics, validate if current account-id is the same.
-		// this will always set shouldSetNotification right?
-		for _, topicConfig := range bn.TopicConfigs {
-			if topicConfig.Topic == accountARN.String() {
-				shouldSetNotification = false
-				break
-			}
-		}
-	}
-
-	if shouldSetNotification {
-		topicConfig := minio.NewNotificationConfig(accountARN)
-		topicConfig.AddEvents(minio.ObjectCreatedAll, minio.ObjectRemovedAll)
-		bn.AddTopic(topicConfig)
-
-		if err := mfs.api.SetBucketNotification(mfs.config.bucket, bn); err != nil {
+	return nil
+	/*
+		// try to set and listen for notifications
+		// Fetch the bucket location.
+		location, err := mfs.api.GetBucketLocation(mfs.config.bucket)
+		if err != nil {
 			return err
 		}
-	}
 
-	doneCh := make(chan struct{})
+		// Fetch any existing bucket notification on the bucket.
+		bn, err := mfs.api.GetBucketNotification(mfs.config.bucket)
+		if err != nil {
+			return err
+		}
 
-	// todo(nl5887): reconnect on close
-	eventsCh := mfs.api.ListenBucketNotification(mfs.config.bucket, accountARN, doneCh)
-	go func() {
-		for notificationInfo := range eventsCh {
-			if notificationInfo.Err != nil {
-				continue
+		accountARN := minio.NewArn("minio", "sns", location, mfs.config.accountID, "listen")
+
+		// If there are no SNS topics configured, configure the first one.
+		shouldSetNotification := len(bn.TopicConfigs) == 0
+		if !shouldSetNotification {
+			// We found previously configure SNS topics, validate if current account-id is the same.
+			// this will always set shouldSetNotification right?
+			for _, topicConfig := range bn.TopicConfigs {
+				if topicConfig.Topic == accountARN.String() {
+					shouldSetNotification = false
+					break
+				}
 			}
+		}
 
-			// Start a writable transaction.
-			tx, err := mfs.db.Begin(true)
-			if err != nil {
-				panic(err)
+		if shouldSetNotification {
+			topicConfig := minio.NewNotificationConfig(accountARN)
+			topicConfig.AddEvents(minio.ObjectCreatedAll, minio.ObjectRemovedAll)
+			bn.AddTopic(topicConfig)
+
+			if err := mfs.api.SetBucketNotification(mfs.config.bucket, bn); err != nil {
+				return err
 			}
+		}
 
-			defer tx.Rollback()
-			// todo(nl5887): defer not called in for each
-			// todo(nl5887): how to ignore my own created events?
-			// can we use eventsource?
+		doneCh := make(chan struct{})
 
-			for _, record := range notificationInfo.Records {
-				key, e := url.QueryUnescape(record.S3.Object.Key)
-				if e != nil {
-					fmt.Print("Error:", err)
+		// todo(nl5887): reconnect on close
+		eventsCh := mfs.api.ListenBucketNotification(mfs.config.bucket, accountARN, doneCh)
+		go func() {
+			for notificationInfo := range eventsCh {
+				if notificationInfo.Err != nil {
 					continue
 				}
 
-				fmt.Printf("%#v", record)
-
-				dir, _ := path.Split(key)
-
-				b := tx.Bucket("minio/")
-
-				if v, err := b.CreateBucketIfNotExists(dir); err != nil {
-					fmt.Print("Error:", err)
-					continue
-				} else {
-					b = v
+				// Start a writable transaction.
+				tx, err := mfs.db.Begin(true)
+				if err != nil {
+					panic(err)
 				}
 
-				var f interface{}
-				if err := b.Get(key, &f); err == nil {
-				} else if !meta.IsNoSuchObject(err) {
-					fmt.Println("Error:", err)
-					continue
-				} else if i, err := mfs.NextSequence(tx); err != nil {
-					fmt.Println("Error:", err)
-					continue
-				} else {
-					oi := record.S3.Object
-					f = File{
-						Size:  uint64(oi.Size),
-						Inode: i,
-						UID:   mfs.config.uid,
-						GID:   mfs.config.gid,
-						Mode:  mfs.config.mode,
-						/*
-							objectMeta doesn't contain those fields
+				defer tx.Rollback()
+				// todo(nl5887): defer not called in for each
+				// todo(nl5887): how to ignore my own created events?
+				// can we use eventsource?
 
-							Chgtime: oi.LastModified,
-							Crtime:  oi.LastModified,
-							Mtime:   oi.LastModified,
-							Atime:   oi.LastModified,
-						*/
-						Path: "/" + key,
-						ETag: oi.ETag,
-					}
-
-					if err := f.(*File).store(tx); err != nil {
-						fmt.Println("Error:", err)
+				for _, record := range notificationInfo.Records {
+					key, e := url.QueryUnescape(record.S3.Object.Key)
+					if e != nil {
+						fmt.Print("Error:", err)
 						continue
 					}
+
+					fmt.Printf("%#v", record)
+
+					dir, _ := path.Split(key)
+
+					b := tx.Bucket("minio/")
+
+					if v, err := b.CreateBucketIfNotExists(dir); err != nil {
+						fmt.Print("Error:", err)
+						continue
+					} else {
+						b = v
+					}
+
+					var f interface{}
+					if err := b.Get(key, &f); err == nil {
+					} else if !meta.IsNoSuchObject(err) {
+						fmt.Println("Error:", err)
+						continue
+					} else if i, err := mfs.NextSequence(tx); err != nil {
+						fmt.Println("Error:", err)
+						continue
+					} else {
+						oi := record.S3.Object
+						f = File{
+							Size:  uint64(oi.Size),
+							Inode: i,
+							UID:   mfs.config.uid,
+							GID:   mfs.config.gid,
+							Mode:  mfs.config.mode,
+							/*
+								objectMeta doesn't contain those fields
+
+								Chgtime: oi.LastModified,
+								Crtime:  oi.LastModified,
+								Mtime:   oi.LastModified,
+								Atime:   oi.LastModified,
+							*
+							Path: "/" + key,
+							ETag: oi.ETag,
+						}
+
+						if err := f.(*File).store(tx); err != nil {
+							fmt.Println("Error:", err)
+							continue
+						}
+					}
+
+				}
+
+				// Commit the transaction and check for error.
+				if err := tx.Commit(); err != nil {
+					panic(err)
 				}
 
 			}
+		}()
 
-			// Commit the transaction and check for error.
-			if err := tx.Commit(); err != nil {
-				panic(err)
-			}
-
-		}
-	}()
-
-	return nil
+		return nil
+	*/
 }
 
 func (mfs *MinFS) mount() (*fuse.Conn, error) {
 	return fuse.Mount(
 		mfs.config.mountpoint,
 		fuse.FSName("MinFS"),
-		fuse.Subtype("MinFS"), // todo: bucket? or amazon /minio?
+		fuse.Subtype("MinFS"),
 		fuse.LocalVolume(),
-		fuse.VolumeName(mfs.config.bucket), // bucket?
+		fuse.VolumeName(mfs.config.bucket),
 	)
 }
 
@@ -285,7 +284,7 @@ func (mfs *MinFS) Serve() error {
 	defer mfs.db.Close()
 
 	fmt.Println("Initializing cache database...")
-	if err := mfs.db.Update(func(tx *bolt.Tx) error {
+	if err := mfs.db.Update(func(tx *meta.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte("minio/"))
 		return err
 	}); err != nil {
@@ -323,105 +322,57 @@ func (mfs *MinFS) Serve() error {
 		return err
 	}
 
-	fmt.Println("Mounted... Have fun!")
-	// serve the filesystem
-	if err := fs.Serve(c, mfs); err != nil {
+	var wg sync.WaitGroup
+
+	// channel to receive errors
+	errorCh := make(chan error, 1)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		fmt.Println("Mounted... Have fun!")
+		// serve the filesystem
+		if err := fs.Serve(c, mfs); err != nil {
+			errorCh <- err
+		}
+	}()
+
+	<-c.Ready
+	if err := c.MountError; err != nil {
 		return err
 	}
 
-	// todo(nl5887): implement this
-	fmt.Println("HOW TO QUIT?")
-
 	// todo(nl5887): move trap signals to Main, this is not supposed to be in Serve
 	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, os.Interrupt, syscall.SIGUSR1)
+	signal.Notify(signalCh, os.Interrupt, os.Kill, syscall.SIGUSR1)
 
 loop:
 	for {
-		// check if the mount process has an error to report
 		select {
-		case <-c.Ready:
-			if err := c.MountError; err != nil {
-				log.Fatal(err)
-			}
+		case err := <-errorCh:
+			return err
 		case s := <-signalCh:
 			if s == os.Interrupt {
-				return mfs.stopNotificationListener()
+				fuse.Unmount(mfs.config.mountpoint)
+				break loop
 			} else if s == syscall.SIGUSR1 {
 				fmt.Println("PRINT STATS")
-				continue
 			}
-			break loop
 		}
 	}
 
-	return nil
-}
+	wg.Wait()
 
-// Operation -
-type Operation struct {
-	Error chan error
-}
+	mfs.stopNotificationListener()
+	fmt.Println("MinFS stopped cleanly.")
 
-// MoveOperation -
-type MoveOperation struct {
-	*Operation
-
-	Source string
-	Target string
-}
-
-// CopyOperation -
-type CopyOperation struct {
-	*Operation
-
-	Source string
-	Target string
-}
-
-// PutOperation -
-type PutOperation struct {
-	*Operation
-
-	Length int64
-
-	Source string
-	Target string
-}
-
-// NewSizedLimitedReader -
-func NewSizedLimitedReader(r io.Reader, length int64) io.Reader {
-	return &SizedLimitedReader{
-		LimitedReader: &io.LimitedReader{
-			R: r,
-			N: length,
-		},
-		length: length,
-	}
-
-}
-
-// SizedLimitedReader -
-type SizedLimitedReader struct {
-	*io.LimitedReader
-	length int64
-}
-
-// Size - returns the size of the underlying reader.
-func (slr *SizedLimitedReader) Size() int64 {
-	return slr.length
-}
-
-func (mfs *MinFS) sync(req interface{}) error {
-	mfs.syncChan <- req
 	return nil
 }
 
 func (mfs *MinFS) startSync() error {
 	go func() {
 		for req := range mfs.syncChan {
-			// todo(nl5887): do we want retries?
-
 			switch req := req.(type) {
 			case *MoveOperation:
 				if err := mfs.api.CopyObject(mfs.config.bucket, req.Target, path.Join(mfs.config.bucket, req.Source), minio.NewCopyConditions()); err != nil {
@@ -456,15 +407,9 @@ func (mfs *MinFS) startSync() error {
 
 				_, err = mfs.api.PutObject(mfs.config.bucket, req.Target, slr, "application/octet-stream")
 				if err != nil {
-					fmt.Printf("%#v: %s\n", req, err.Error())
-
 					req.Error <- err
 					return
 				}
-
-				// todo(nl5887): remove for debugging purposes
-				// this is for testing locks
-				time.Sleep(time.Second * 2)
 
 				fmt.Printf("Upload finished: %s -> %s.\n", req.Source, req.Target)
 				req.Error <- err
@@ -477,40 +422,19 @@ func (mfs *MinFS) startSync() error {
 	return nil
 }
 
-// Release release the filehandle
-func (mfs *MinFS) Release(fh *FileHandle) {
-	mfs.m.Lock()
-	defer mfs.m.Unlock()
-
-	mfs.handles[fh.handle] = nil
+// Statfs will return meta information on the minio filesystem
+func (mfs *MinFS) Statfs(ctx context.Context, req *fuse.StatfsRequest, resp *fuse.StatfsResponse) error {
+	return nil
 }
 
 // Acquire will return a new FileHandle
 func (mfs *MinFS) Acquire(f *File) (*FileHandle, error) {
-	mfs.m.Lock()
-	defer mfs.m.Unlock()
-
-	/*
-		new locking strategy {
-		    mfs.locks = map[string]sync.Mutex{}
-
-		    futex?
-		    mfs.locks
-		}
-	*/
-
-	// generate unique cache path
-	cachePath := ""
-	if v, err := mfs.NewCachePath(); err != nil {
+	if err := mfs.Lock(f.FullPath()); err != nil {
 		return nil, err
-	} else {
-		cachePath = v
 	}
 
 	h := &FileHandle{
 		f: f,
-
-		cachePath: cachePath,
 	}
 
 	mfs.handles = append(mfs.handles, h)
@@ -519,19 +443,14 @@ func (mfs *MinFS) Acquire(f *File) (*FileHandle, error) {
 	return h, nil
 }
 
-// IsLocked -
-func (mfs *MinFS) IsLocked(path string) bool {
-	for _, fh := range mfs.handles {
-		if fh == nil {
-			continue
-		}
-
-		if fh.f.Path == path {
-			return true
-		}
+// Release release the filehandle
+func (mfs *MinFS) Release(fh *FileHandle) error {
+	if err := mfs.Unlock(fh.f.FullPath()); err != nil {
+		return err
 	}
 
-	return false
+	mfs.handles[fh.handle] = nil
+	return nil
 }
 
 // NextSequence will return the next free iNode

@@ -5,15 +5,18 @@ import (
 	"io"
 	"os"
 
+	"github.com/minio/minfs/meta"
+
 	"bazil.org/fuse"
 	"golang.org/x/net/context"
 )
 
-// FileHandle -
+// FileHandle - Contains an opened file which can be read from and written to
 type FileHandle struct {
+	// the os file handle
 	*os.File
 
-	// names are confusing
+	// the fuse file
 	f *File
 
 	// cache file has been written to
@@ -24,6 +27,7 @@ type FileHandle struct {
 	handle uint64
 }
 
+// Read from the file handle
 func (fh *FileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadResponse) error {
 	buff := make([]byte, req.Size)
 	n, err := fh.File.ReadAt(buff, req.Offset)
@@ -36,14 +40,13 @@ func (fh *FileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fus
 	return nil
 }
 
+// Write to the file handle
 func (fh *FileHandle) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.WriteResponse) error {
 	if _, err := fh.File.Seek(req.Offset, 0); err != nil {
-		fmt.Println("ERROR", err.Error())
 		return err
 	}
 
 	if n, err := fh.File.Write(req.Data); err != nil {
-		fmt.Println("ERROR", err.Error())
 		return err
 	} else {
 		// Writes that grow the file are expected to update the file size
@@ -61,7 +64,13 @@ func (fh *FileHandle) Write(ctx context.Context, req *fuse.WriteRequest, resp *f
 	}
 }
 
-// Release -
+// because of bug in fuse lib, this is on file
+func (f *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) error {
+	fmt.Println("fsync", f.FullPath())
+	return nil
+}
+
+// Release the file handle
 func (fh *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) error {
 	if err := fh.Close(); err != nil {
 		return err
@@ -103,22 +112,9 @@ func (fh *FileHandle) Flush(ctx context.Context, req *fuse.FlushRequest) error {
 	}
 
 	// update cache
-	// Start a writable transaction.
-	tx, err := fh.f.mfs.db.Begin(true)
-	if err != nil {
-		return err
-	}
-
-	defer tx.Rollback()
-
-	fmt.Printf("%#v\n", *fh)
-	fmt.Printf("%#v\n", *fh.f)
-	if err := fh.f.store(tx); err != nil {
-		return err
-	}
-
-	// Commit the transaction and check for error.
-	if err := tx.Commit(); err != nil {
+	if err := fh.f.mfs.db.Update(func(tx *meta.Tx) error {
+		return fh.f.store(tx)
+	}); err != nil {
 		return err
 	}
 

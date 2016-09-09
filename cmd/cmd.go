@@ -135,14 +135,16 @@ func Main() {
 			mountpoint := c.Args().Get(1)
 
 			opts = append(opts, minfs.Mountpoint(mountpoint), minfs.Target(target), minfs.Debug())
-			fs, err := minfs.New(opts...)
-			if err != nil {
-				console.Fatalln("Unable to instantiate a new minfs", err)
-			}
-			err = fs.Serve()
-			if err != nil {
-				console.Fatalln("Unable to serve a minfs", err)
-			}
+		}
+
+		fs, err := minfs.New(opts...)
+		if err != nil {
+			console.Fatalln("Unable to instantiate a new minfs", err)
+		}
+
+		err = fs.Serve()
+		if err != nil {
+			console.Fatalln("Unable to serve a minfs", err)
 		}
 	}
 

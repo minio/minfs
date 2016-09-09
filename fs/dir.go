@@ -142,7 +142,9 @@ func (dir *Dir) scan(ctx context.Context) error {
 	defer close(doneCh)
 
 	prefix := dir.RemotePath()
-	prefix = prefix + "/"
+	if prefix != "" {
+		prefix = prefix + "/"
+	}
 
 	fmt.Println("Scan", prefix)
 

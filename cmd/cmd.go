@@ -18,25 +18,51 @@
 package cmd
 
 import (
-	"flag"
-	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
+	"github.com/minio/cli"
 	"github.com/minio/mc/pkg/console"
 	minfs "github.com/minio/minfs/fs"
 )
 
-var options = flag.String("o", "", "mount options")
+var (
+	// global flags for minfs.
+	minfsFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "help, h",
+			Usage: "Show help.",
+		},
+	}
+)
 
-func usage() {
-	fmt.Fprintf(os.Stderr, "MinFS for cloud storage.\n\n")
-
-	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s MOUNTPOINT\n", os.Args[0])
-	flag.PrintDefaults()
+// Collection of minio flags currently supported.
+var globalFlags = []cli.Flag{
+	cli.StringFlag{
+		Name:  "o",
+		Usage: "Fuse mount options.",
+	},
 }
+
+// Help template for minfs.
+var minfsHelpTemplate = `NAME:
+  {{.Name}} - {{.Usage}}
+
+DESCRIPTION:
+  {{.Description}}
+
+USAGE:
+  {{.Name}} {{if .Flags}}[flags] {{end}}command{{if .Flags}}{{end}} [arguments...]
+
+COMMANDS:
+  {{range .Commands}}{{join .Names ", "}}{{ "\t" }}{{.Usage}}
+  {{end}}{{if .Flags}}
+FLAGS:
+  {{range .Flags}}{{.}}
+  {{end}}{{end}}
+VERSION:
+  ` + Version +
+	`{{ "\n"}}`
 
 // Main is the actual run function
 func Main() {
@@ -52,61 +78,75 @@ func Main() {
 		}
 	*/
 
-	// arguments:
+	// Options:
 	// -- debug
 	// -- bucket
 	// -- target
 	// -- permissions
 	// -- uid / gid
 
-	flag.Usage = usage
-	flag.Parse()
-
-	if flag.NArg() != 2 {
-		usage()
-		os.Exit(2)
+	// Set up app.
+	app := cli.NewApp()
+	app.Name = "minfs"
+	app.Author = "Minio.io"
+	app.Usage = "Fuse driver for Cloud Storage Server."
+	app.Description = `MinFS is a fuse driver for Amazon S3 compatible object storage server. Use it to store photos, videos, VMs, containers, log files, or any blob of data as objects on your object storage server.`
+	app.Flags = append(minfsFlags, globalFlags...)
+	app.CustomAppHelpTemplate = minfsHelpTemplate
+	app.Before = func(c *cli.Context) error {
+		if !c.IsSet("o") {
+			cli.ShowAppHelpAndExit(c, 1)
+		}
+		if !c.Args().Present() {
+			cli.ShowAppHelpAndExit(c, 1)
+		}
+		return nil
 	}
-
-	opts := []func(*minfs.Config){}
-
-	for _, option := range strings.Split(*options, ",") {
-		vals := strings.Split(option, "=")
-		switch vals[0] {
-		case "uid":
-			if len(vals) == 1 {
-				console.Fatalln("Uid has no value")
-			} else if val, err := strconv.Atoi(vals[1]); err != nil {
-				console.Fatalf("Uid is not a valid value: %s\n", vals[1])
-			} else {
-				opts = append(opts, minfs.Uid(uint32(val)))
+	app.Action = func(c *cli.Context) {
+		opts := []func(*minfs.Config){}
+		for _, option := range strings.Split(c.String("o"), ",") {
+			vals := strings.Split(option, "=")
+			switch vals[0] {
+			case "uid":
+				if len(vals) == 1 {
+					console.Fatalln("Uid has no value")
+				} else if val, err := strconv.Atoi(vals[1]); err != nil {
+					console.Fatalf("Uid is not a valid value: %s\n", vals[1])
+				} else {
+					opts = append(opts, minfs.SetUID(uint32(val)))
+				}
+			case "gid":
+				if len(vals) == 1 {
+					console.Fatalln("Uid has no value")
+				} else if val, err := strconv.Atoi(vals[1]); err != nil {
+					console.Fatalf("Gid is not a valid value: %s\n", vals[1])
+				} else {
+					opts = append(opts, minfs.SetGID(uint32(val)))
+				}
+			case "cache":
+				if len(vals) == 1 {
+					console.Fatalln("Cache has no value")
+				} else {
+					opts = append(opts, minfs.CacheDir(vals[1]))
+				}
 			}
-		case "gid":
-			if len(vals) == 1 {
-				console.Fatalln("Uid has no value")
-			} else if val, err := strconv.Atoi(vals[1]); err != nil {
-				console.Fatalf("Gid is not a valid value: %s\n", vals[1])
-			} else {
-				opts = append(opts, minfs.Gid(uint32(val)))
+
+			target := c.Args().Get(0)
+			mountpoint := c.Args().Get(1)
+
+			opts = append(opts, minfs.Mountpoint(mountpoint), minfs.Target(target), minfs.Debug())
+			fs, err := minfs.New(opts...)
+			if err != nil {
+				console.Fatalln("Unable to instantiate a new minfs", err)
 			}
-		case "cache":
-			if len(vals) == 1 {
-				console.Fatalln("Cache has no value")
-			} else {
-				opts = append(opts, minfs.CacheDir(vals[1]))
+			err = fs.Serve()
+			if err != nil {
+				console.Fatalln("Unable to serve a minfs", err)
 			}
 		}
 	}
 
-	target := flag.Arg(0)
-	mountpoint := flag.Arg(1)
+	// Run the app - exit on error.
+	app.RunAndExitOnError()
 
-	opts = append(opts, minfs.Mountpoint(mountpoint), minfs.Target(target), minfs.Debug())
-	fs, err := minfs.New(opts...)
-	if err != nil {
-		console.Fatalln("Unable to instantiate a new minfs", err)
-	}
-	err = fs.Serve()
-	if err != nil {
-		console.Fatalln("Unable to serve a minfs", err)
-	}
 }

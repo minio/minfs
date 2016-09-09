@@ -25,20 +25,27 @@ The following features are roughly working at the moment:
 ## Build
 
 ```
-$ go get github.com/minio/minfs
-$ go build -o /usr/bin/minfs
+$ go get -d github.com/minio/minfs
+$ cd $GOPATH/minio/minfs
+$ make
 ```
 
-## Installation
+## Installation on Linux
 
 ```
-$ ln -s /usr/bin/minfs /usr/sbin/mount.minfs
+$ sudo ln -s $GOPATH/bin/minfs /sbin/mount.minfs
 ```
 
-## Mount
+## Installation on OS X
 
 ```
-$ mount -t minfs -o gid=0,uid=0,cache=./cache/ http://{access key}:{secret key}@172.16.84.1:9000/asiatrip /hello
+$ sudo ln -s $GOPATH/bin/minfs /sbin/mount_minfs
+```
+
+## Mount on Linux and OS X
+
+```
+$ sudo MINFS_ACCESS=AKIAIOSFODNN7EXAMPLE MINFS_SECRET=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY mount -t minfs http://172.16.84.1:9000/asiatrip /mnt/object-storage
 ```
 
 ## Unmount

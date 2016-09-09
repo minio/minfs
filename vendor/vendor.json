@@ -54,6 +54,12 @@
 			"revisionTime": "2016-08-18T07:41:28Z"
 		},
 		{
+			"checksumSHA1": "PH+YEwlxx+3MIswPEPNbYQRxFlU=",
+			"path": "github.com/minio/cli",
+			"revision": "2e10078e4de1ca37fb1bd62cc79ab87c024b3a1b",
+			"revisionTime": "2016-09-09T03:00:45Z"
+		},
+		{
 			"checksumSHA1": "CgMkKCG6mu3N6n7GxWhyCWYMQWI=",
 			"path": "github.com/minio/mc/pkg/console",
 			"revision": "90a421e4af75d0d0fbc99af01cb37cc44cb5b000",

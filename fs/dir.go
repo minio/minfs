@@ -203,11 +203,8 @@ func (dir *Dir) scan(ctx context.Context) error {
 					Mtime:   message.LastModified,
 					Atime:   message.LastModified,
 				}
-
 			}
-
 			fmt.Printf("%s %#v\n", key, d)
-
 			if err := d.store(tx); err != nil {
 				return err
 			}
@@ -258,7 +255,6 @@ func (dir *Dir) scan(ctx context.Context) error {
 				}
 
 			}
-
 			if err := f.store(tx); err != nil {
 				return err
 			}
@@ -526,6 +522,7 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 	return &f, fh, nil
 }
 
+// Rename -
 func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node) error {
 	// todo(nl5887): implement cancel
 

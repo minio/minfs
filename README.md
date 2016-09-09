@@ -7,7 +7,7 @@ MinFS is a fuse driver for Minio and S3 storage backends. Currently we can list 
 
 The cache folder is being used for the BoltDB cache database and the files being cached or modified. It will be always possible to remove the cache folder and cache database. Be careful that MinFS has synchronised the data to the storage. The cache folder will be recreated.
 
-Files that are modified will be queued and uploaded to storage.
+Files that are modified will be queued and uploaded to storage. We're using a defensive locking strategy, that is making MinFS slower, but we'll have less chance of corruption and data loss. Applications will wait for the file to be downloaded first, or till the file has been flushed to the Minio compatible storage. All files are being opened exclusively.
 
 ## Working
 
@@ -15,12 +15,16 @@ The following features are roughly working at the moment:
 
 * list folders and subfolders
 * open and read files
-* create new files (not being uploaded to storage yet, only cache)
-* modify existing files (not being uploaded to storage yet, only cache)
+* create new files 
+* modify existing files 
 * move and rename of files
-* upload of files
+* copy files
 * delete files
 * change permissions
+
+## Known issues
+
+* renaming directories will cause an error when directly accessing the newly moved folder
 
 ## Build
 
@@ -45,7 +49,13 @@ $ sudo ln -s $GOPATH/bin/minfs /sbin/mount_minfs
 ## Mount on Linux and OS X
 
 ```
-$ sudo MINFS_ACCESS=AKIAIOSFODNN7EXAMPLE MINFS_SECRET=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY mount -t minfs http://172.16.84.1:9000/asiatrip /mnt/object-storage
+$ sudo MINFS_ACCESS=AKIAIOSFODNN7EXAMPLE MINFS_SECRET=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY mount -t minfs http://172.16.84.1:9000/asiatrip /hello
+```
+
+It is possible to mount a directory in a bucket to a mountpoint. Just append the directory to the source url. E.g
+
+```
+$ sudo MINFS_ACCESS=AKIAIOSFODNN7EXAMPLE MINFS_SECRET=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY mount -t minfs http://172.16.84.1:9000/asiatrip/dir1/ /hello
 ```
 
 ## Unmount
@@ -81,33 +91,61 @@ issues with synchronization and keeps the fuse driver simple.
 
 * if you cannot unmount, try seeing what files are open on the mount. `lsof |grep mount`
 
-## Debugging
-
-We've added a sleep to the upload, this allows us to test the locking mechanism.
-
 ## Scenarios
 
 * create a file
+``` 
+echo test > /hello/test
+```
 * append to a file
+```
+echo test > /hello/test
+```
 * make directory
+```
+mkdir /hello/newdir
+```
 * remove empty directory 
+```
+rm -rf /hello/hewdir
+```
+* copy lot of small files
+```
+cp -r .git /hello/
+```
+* read and verify a lot of files
+```
+diff -r .git /hello/.git/
+```
 * remove directory with contents
+```
+rm -rf /hello/.git
+```
 * rename file
+```
+mv /hello/test /hello/test2
+```
 * move file into different directory
+```
+mv /hello/test2 /hello/newdir/test2
+```
 * move directory with contents
+```
+mv /hello/newdir /hello/newdir2
+```
 * check locked file
+```
+
+```
 
 ## Todo
 
 There is a long list of todos:
 
 * allow stats to be printed using a signal
-* use local cache folder, for most used files. Do we want to register / cache this info in a bolt db?
 * use Minio notifications to actively update metadata 
 * one mountpoint per bucket
 * each mountpoint will have its own cache folders and can be mounted to one bucket
 * use minio configs? .minfs file for keys?
 * implement encryption support, (a)symmetric
-+ implement base path
-* implement support for cancel context
 * mount readonly?

@@ -1,3 +1,19 @@
+/*
+ * MinFS - fuse driver for Object Storage (C) 2016 Minio, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package minfs
 
 import (
@@ -31,11 +47,9 @@ type FileHandle struct {
 func (fh *FileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadResponse) error {
 	buff := make([]byte, req.Size)
 	n, err := fh.File.ReadAt(buff, req.Offset)
-	if err == io.EOF {
-	} else if err != nil {
+	if err != nil && err != io.EOF {
 		return err
 	}
-
 	resp.Data = buff[:n]
 	return nil
 }
@@ -45,26 +59,22 @@ func (fh *FileHandle) Write(ctx context.Context, req *fuse.WriteRequest, resp *f
 	if _, err := fh.File.Seek(req.Offset, 0); err != nil {
 		return err
 	}
-
-	if n, err := fh.File.Write(req.Data); err != nil {
+	n, err := fh.File.Write(req.Data)
+	if err != nil {
 		return err
-	} else {
-		// Writes that grow the file are expected to update the file size
-		// (as seen through Attr). Note that file size changes are
-		// communicated also through Setattr.
-		if fh.f.Size < uint64(req.Offset)+uint64(n) {
-			fh.f.Size = uint64(req.Offset) + uint64(n)
-		}
-
-		resp.Size = n
-
-		fh.dirty = true
-
-		return nil
 	}
+	// Writes that grow the file are expected to update the file size
+	// (as seen through Attr). Note that file size changes are
+	// communicated also through Setattr.
+	if fh.f.Size < uint64(req.Offset)+uint64(n) {
+		fh.f.Size = uint64(req.Offset) + uint64(n)
+	}
+	resp.Size = n
+	fh.dirty = true
+	return nil
 }
 
-// because of bug in fuse lib, this is on file
+// Fsync because of bug in fuse lib, this is on file. -- FIXME - needs more context (y4m4).
 func (f *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) error {
 	fmt.Println("fsync", f.FullPath())
 	return nil

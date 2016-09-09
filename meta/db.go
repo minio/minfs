@@ -1,15 +1,32 @@
-package meta
+/*
+ * MinFS - fuse driver for Object Storage (C) 2016 Minio, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-// Meta package maintains the caching of all meta data of the files and directories.
+// Package meta maintains the caching of all meta data of the files and directories.
+package meta
 
 import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"gopkg.in/vmihailenco/msgpack.v2"
 
 	"github.com/boltdb/bolt"
+	minio "github.com/minio/minio-go"
 )
 
 // RegisterExt -
@@ -99,7 +116,7 @@ func (b *Bucket) CreateBucketIfNotExists(key string) (*Bucket, error) {
 	return &Bucket{child}, err
 }
 
-// Tx -
+// Tx - transaction struct.
 type Tx struct {
 	*bolt.Tx
 }
@@ -119,16 +136,20 @@ func IsNoSuchObject(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Validate if the type is same as well.
-	if err == ErrNoSuchObject {
-		return true
-	} else if err.Error() == ErrNoSuchObject.Error() {
-		// Reaches here when type did not match but err string matches.
-		// Someone wrapped this error? - still return true since
-		// they are the same.
-		return true
+	errorResponse := minio.ToErrorResponse(err)
+	if reflect.DeepEqual(errorResponse, minio.ErrorResponse{}) {
+		// Validate if the type is same as well.
+		if err == ErrNoSuchObject {
+			return true
+		} else if err.Error() == ErrNoSuchObject.Error() {
+			// Reaches here when type did not match but err string matches.
+			// Someone wrapped this error? - still return true since
+			// they are the same.
+			return true
+		}
+		return false
 	}
-	return false
+	return errorResponse.Code == "NoSuchKey"
 }
 
 // DeleteBucket -

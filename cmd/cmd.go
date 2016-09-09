@@ -39,7 +39,7 @@ var (
 // Collection of minio flags currently supported.
 var globalFlags = []cli.Flag{
 	cli.StringFlag{
-		Name:  "options, o",
+		Name:  "o",
 		Usage: "Fuse mount options.",
 	},
 }
@@ -94,14 +94,17 @@ func Main() {
 	app.Flags = append(minfsFlags, globalFlags...)
 	app.CustomAppHelpTemplate = minfsHelpTemplate
 	app.Before = func(c *cli.Context) error {
-		if !c.IsSet("options") {
+		if !c.IsSet("o") {
+			cli.ShowAppHelpAndExit(c, 1)
+		}
+		if !c.Args().Present() {
 			cli.ShowAppHelpAndExit(c, 1)
 		}
 		return nil
 	}
 	app.Action = func(c *cli.Context) {
 		opts := []func(*minfs.Config){}
-		for _, option := range strings.Split(c.String("options"), ",") {
+		for _, option := range strings.Split(c.String("o"), ",") {
 			vals := strings.Split(option, "=")
 			switch vals[0] {
 			case "uid":

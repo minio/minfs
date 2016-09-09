@@ -88,14 +88,28 @@ func NewApp() *App {
 	}
 }
 
+// Returns true if any args has a command.
+func (a *App) argsHasCommand(args []string) bool {
+	for _, arg := range args {
+		if a.Command(arg) != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // getNewContext -
 func (a *App) getNewContext(arguments []string) (*Context, error) {
 	// parse flags
 	set := flagSet(a.Name, a.Flags)
 	set.SetOutput(ioutil.Discard)
 	context := NewContext(a, set, set)
-
-	err := set.Parse(arguments[1:])
+	var err error
+	if a.argsHasCommand(arguments) {
+		err = set.Parse(arguments[1:])
+	} else {
+		err = set.Parse(normalizeArguments(arguments))
+	}
 	if err != nil {
 		if len(arguments[1:]) > 1 {
 			fmt.Fprint(a.Writer, fmt.Sprintf("Unknown flags. ‘%s’\n\n", strings.Join(arguments[1:], ", ")))
@@ -209,30 +223,35 @@ func (a *App) RunAsSubcommand(ctx *Context) (err error) {
 	// parse flags
 	set := flagSet(a.Name, a.Flags)
 	set.SetOutput(ioutil.Discard)
-	err = set.Parse(ctx.Args().Tail())
-	nerr := normalizeFlags(a.Flags, set)
-	context := NewContext(a, set, ctx.globalSet)
 
-	if nerr != nil {
-		fmt.Fprintln(a.Writer, nerr)
-		if len(a.Commands) > 0 {
-			ShowSubcommandHelp(context)
-		} else {
-			ShowCommandHelp(ctx, context.Args().First())
-		}
-		fmt.Fprint(a.Writer, "")
-		return nerr
+	if a.argsHasCommand(ctx.Args().Tail()) {
+		err = set.Parse(ctx.Args().Tail())
+	} else {
+		err = set.Parse(normalizeArguments(ctx.Args()))
 	}
-
 	if err != nil {
 		if len(ctx.Args().Tail()) > 1 {
 			fmt.Fprint(a.Writer, fmt.Sprintf("Unknown flags. ‘%s’\n\n", strings.Join(ctx.Args().Tail(), ", ")))
 		} else {
 			fmt.Fprint(a.Writer, fmt.Sprintf("Unknown flag. ‘%s’\n\n", ctx.Args().Tail()[0]))
 		}
-		ShowSubcommandHelp(context)
+		ShowSubcommandHelp(ctx)
 		return err
 	}
+
+	nerr := normalizeFlags(a.Flags, set)
+	if nerr != nil {
+		fmt.Fprintln(a.Writer, nerr)
+		if len(a.Commands) > 0 {
+			ShowSubcommandHelp(ctx)
+		} else {
+			ShowCommandHelp(ctx, ctx.Args().First())
+		}
+		fmt.Fprint(a.Writer, "")
+		return nerr
+	}
+
+	context := NewContext(a, set, ctx.globalSet)
 
 	if checkCompletions(context) {
 		return nil

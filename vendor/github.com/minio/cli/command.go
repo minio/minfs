@@ -42,8 +42,42 @@ type Command struct {
 	CustomHelpTemplate string
 }
 
+// Normalize all incoming arguments and re-arrange the flags to be always the first elements in the list.
+func normalizeArguments(arguments []string) (normalizeArgs []string) {
+	firstFlagIndex := -1
+	terminatorIndex := -1
+	for index, arg := range arguments {
+		if arg == "--" {
+			terminatorIndex = index
+			break
+		} else if arg == "-" {
+			// Do nothing, A dash alone is not really a flag.
+			continue
+		} else if strings.HasPrefix(arg, "-") && firstFlagIndex == -1 {
+			firstFlagIndex = index
+		}
+	}
+	if firstFlagIndex > -1 {
+		args := arguments
+		regularArgs := make([]string, len(args[1:firstFlagIndex]))
+		copy(regularArgs, args[1:firstFlagIndex])
+
+		var flagArgs []string
+		if terminatorIndex > -1 {
+			flagArgs = args[firstFlagIndex:terminatorIndex]
+			regularArgs = append(regularArgs, args[terminatorIndex:]...)
+		} else {
+			flagArgs = args[firstFlagIndex:]
+		}
+		normalizeArgs = append(flagArgs, regularArgs...)
+	} else {
+		normalizeArgs = arguments[1:]
+	}
+	return normalizeArgs
+}
+
 // Run - Invokes the command given the context, parses ctx.Args() to generate command-specific flags
-func (c Command) Run(ctx *Context) error {
+func (c Command) Run(ctx *Context) (err error) {
 	if len(c.Subcommands) > 0 || c.Before != nil || c.After != nil {
 		return c.startApp(ctx)
 	}
@@ -55,36 +89,13 @@ func (c Command) Run(ctx *Context) error {
 	set := flagSet(c.Name, c.Flags)
 	set.SetOutput(ioutil.Discard)
 
-	firstFlagIndex := -1
-	terminatorIndex := -1
-	for index, arg := range ctx.Args() {
-		if arg == "--" {
-			terminatorIndex = index
-			break
-		} else if strings.HasPrefix(arg, "-") && firstFlagIndex == -1 {
-			firstFlagIndex = index
-		}
-	}
-
-	var err error
-	if firstFlagIndex > -1 && !c.SkipFlagParsing {
-		args := ctx.Args()
-		regularArgs := make([]string, len(args[1:firstFlagIndex]))
-		copy(regularArgs, args[1:firstFlagIndex])
-
-		var flagArgs []string
-		if terminatorIndex > -1 {
-			flagArgs = args[firstFlagIndex:terminatorIndex]
-			regularArgs = append(regularArgs, args[terminatorIndex:]...)
-		} else {
-			flagArgs = args[firstFlagIndex:]
-		}
-
-		err = set.Parse(append(flagArgs, regularArgs...))
+	if !c.SkipFlagParsing {
+		err = set.Parse(normalizeArguments(ctx.Args()))
 	} else {
-		err = set.Parse(ctx.Args().Tail())
+		if c.SkipFlagParsing {
+			err = set.Parse(append([]string{"--"}, ctx.Args().Tail()...))
+		}
 	}
-
 	if err != nil {
 		if len(ctx.Args().Tail()) > 1 {
 			fmt.Fprint(ctx.App.Writer, fmt.Sprintf("Unknown flags. ‘%s’\n\n", strings.Join(ctx.Args().Tail(), ", ")))

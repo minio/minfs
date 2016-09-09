@@ -25,14 +25,13 @@ The following features are roughly working at the moment:
 ## Build
 
 ```
-$ go get github.com/minio/minfs
-$ go build -o /usr/bin/minfs
+$ go get -u github.com/minio/minfs
 ```
 
 ## Installation
 
 ```
-$ ln -s /usr/bin/minfs /usr/sbin/mount.minfs
+$ ln -s $GOPATH/bin/minfs /sbin/mount.minfs
 ```
 
 ## Mount

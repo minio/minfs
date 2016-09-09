@@ -299,7 +299,18 @@ func (mfs *MinFS) Serve() (err error) {
 	if err != nil {
 		return err
 	}
-
+	// Validate if the bucket is valid and accessible.
+	exists, err := mfs.api.BucketExists(mfs.config.bucket)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return minio.ErrorResponse{
+			BucketName: mfs.config.bucket,
+			Code:       "NoSuchBucket",
+			Message:    "The specified bucket does not exist",
+		}
+	}
 	// set notifications
 	fmt.Println("Starting notification listener...")
 	if err = mfs.startNotificationListener(); err != nil {

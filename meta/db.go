@@ -104,8 +104,25 @@ func (tx *Tx) Bucket(name string) *Bucket {
 	}
 }
 
-// ErrNoSuchObject -
+// ErrNoSuchObject - returned when object is not found.
 var ErrNoSuchObject = errors.New("No such object.")
+
+// IsNoSuchObject - is err ErrNoSuchObject ?
+func IsNoSuchObject(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Validate if the type is same as well.
+	if err == ErrNoSuchObject {
+		return true
+	} else if err.Error() == ErrNoSuchObject.Error() {
+		// Reaches here when type did not match but err string matches.
+		// Someone wrapped this error? - still return true since
+		// they are the same.
+		return true
+	}
+	return false
+}
 
 // DeleteBucket -
 func (b *Bucket) DeleteBucket(key string) error {

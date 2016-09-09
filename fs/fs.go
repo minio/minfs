@@ -211,7 +211,7 @@ func (mfs *MinFS) startNotificationListener() error {
 
 				var f interface{}
 				if err := b.Get(key, &f); err == nil {
-				} else if err != meta.ErrNoSuchObject {
+				} else if !meta.IsNoSuchObject(err) {
 					fmt.Println("Error:", err)
 					continue
 				} else if i, err := mfs.NextSequence(tx); err != nil {
@@ -389,6 +389,7 @@ type PutOperation struct {
 	Target string
 }
 
+// NewSizedLimitedReader -
 func NewSizedLimitedReader(r io.Reader, length int64) io.Reader {
 	return &SizedLimitedReader{
 		LimitedReader: &io.LimitedReader{
@@ -400,11 +401,13 @@ func NewSizedLimitedReader(r io.Reader, length int64) io.Reader {
 
 }
 
+// SizedLimitedReader -
 type SizedLimitedReader struct {
 	*io.LimitedReader
 	length int64
 }
 
+// Size - returns the size of the underlying reader.
 func (slr *SizedLimitedReader) Size() int64 {
 	return slr.length
 }

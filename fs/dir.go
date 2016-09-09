@@ -230,7 +230,7 @@ func (dir *Dir) scan(ctx context.Context) error {
 				if message.LastModified.After(f.Atime) {
 					f.Atime = message.LastModified
 				}
-			} else if err != meta.ErrNoSuchObject {
+			} else if !meta.IsNoSuchObject(err) {
 				return err
 			} else if i, err := dir.mfs.NextSequence(tx); err != nil {
 				return err
@@ -406,7 +406,7 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 	var o interface{}
 	if err := b.Get(req.Name, &o); err != nil {
 		return err
-	} else if err == meta.ErrNoSuchObject {
+	} else if meta.IsNoSuchObject(err) {
 		return fuse.ENOENT
 	} else if err := b.Delete(req.Name); err != nil {
 		return err
@@ -571,7 +571,7 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 			},
 		}
 
-		if err := dir.mfs.sync(&sr); err == meta.ErrNoSuchObject {
+		if err := dir.mfs.sync(&sr); meta.IsNoSuchObject(err) {
 			return fuse.ENOENT
 		} else if err != nil {
 			return err
@@ -611,7 +611,7 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 				},
 			}
 
-			if err := dir.mfs.sync(&sr); err == meta.ErrNoSuchObject {
+			if err := dir.mfs.sync(&sr); meta.IsNoSuchObject(err) {
 				return fuse.ENOENT
 			} else if err != nil {
 				return err

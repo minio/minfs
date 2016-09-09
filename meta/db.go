@@ -4,8 +4,8 @@ package meta
 
 import (
 	"errors"
-	"log"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/vmihailenco/msgpack.v2"
 
@@ -20,9 +20,13 @@ func RegisterExt(id int8, value interface{}) interface{} {
 
 // Open -
 func Open(path string, mode os.FileMode, options *bolt.Options) (*DB, error) {
+	dname := filepath.Dir(path)
+	if err := os.MkdirAll(dname, 0700); err != nil {
+		return nil, err
+	}
 	db, err := bolt.Open(path, 0600, nil)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	return &DB{

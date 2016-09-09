@@ -18,7 +18,6 @@
 package cmd
 
 import (
-	"flag"
 	"strconv"
 	"strings"
 
@@ -129,8 +128,8 @@ func Main() {
 				}
 			}
 
-			target := flag.Arg(0)
-			mountpoint := flag.Arg(1)
+			target := c.Args().Get(0)
+			mountpoint := c.Args().Get(1)
 
 			opts = append(opts, minfs.Mountpoint(mountpoint), minfs.Target(target), minfs.Debug())
 			fs, err := minfs.New(opts...)

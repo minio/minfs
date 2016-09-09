@@ -4,4 +4,5 @@ cover.out
 *.test
 release
 experimental
+cache
 coverage.txt

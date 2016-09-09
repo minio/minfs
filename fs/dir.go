@@ -1,3 +1,19 @@
+/*
+ * MinFS - fuse driver for Object Storage (C) 2016 Minio, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package minfs
 
 import (
@@ -10,6 +26,7 @@ import (
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
 	"github.com/minio/minfs/meta"
+	minio "github.com/minio/minio-go"
 	"golang.org/x/net/context"
 )
 
@@ -118,6 +135,91 @@ func (dir *Dir) FullPath() string {
 	return fullPath
 }
 
+func (dir *Dir) storeFile(bucket *meta.Bucket, tx *meta.Tx, baseKey string, objInfo minio.ObjectInfo) error {
+	var f File
+	err := bucket.Get(baseKey, &f)
+	if err == nil {
+		// Object already exists and accessible, update values as needed.
+		f.dir = dir
+		f.mfs = dir.mfs
+		f.Size = uint64(objInfo.Size)
+		f.ETag = objInfo.ETag
+		if objInfo.LastModified.After(f.Chgtime) {
+			f.Chgtime = objInfo.LastModified
+		}
+		if objInfo.LastModified.After(f.Crtime) {
+			f.Crtime = objInfo.LastModified
+		}
+		if objInfo.LastModified.After(f.Mtime) {
+			f.Mtime = objInfo.LastModified
+		}
+		if objInfo.LastModified.After(f.Atime) {
+			f.Atime = objInfo.LastModified
+		}
+	} else if meta.IsNoSuchObject(err) {
+		// Object not found, allocate a new inode.
+		var seq uint64
+		seq, err = dir.mfs.NextSequence(tx)
+		if err != nil {
+			return err
+		}
+		f = File{
+			dir:     dir,
+			Path:    baseKey,
+			Size:    uint64(objInfo.Size),
+			Inode:   seq,
+			Mode:    dir.mfs.config.mode,
+			GID:     dir.mfs.config.gid,
+			UID:     dir.mfs.config.uid,
+			Chgtime: objInfo.LastModified,
+			Crtime:  objInfo.LastModified,
+			Mtime:   objInfo.LastModified,
+			Atime:   objInfo.LastModified,
+			ETag:    objInfo.ETag,
+		}
+		if err = f.store(tx); err != nil {
+			return err
+		}
+	} // else {
+	// Returns failure for all other errors.
+	return err
+}
+
+func (dir *Dir) storeDir(bucket *meta.Bucket, tx *meta.Tx, baseKey string, objInfo minio.ObjectInfo) error {
+	var d Dir
+	err := bucket.Get(baseKey, &d)
+	if err == nil {
+		// Prefix already exists and accessible, update values as needed.
+		d.dir = dir
+		d.mfs = dir.mfs
+	} else if meta.IsNoSuchObject(err) {
+		// Prefix not found allocate a new inode and create a new directory.
+		var seq uint64
+		seq, err = dir.mfs.NextSequence(tx)
+		if err != nil {
+			return err
+		}
+		d = Dir{
+			dir:   dir,
+			Path:  baseKey,
+			Inode: seq,
+			Mode:  0770 | os.ModeDir,
+			GID:   dir.mfs.config.gid,
+			UID:   dir.mfs.config.uid,
+
+			Chgtime: objInfo.LastModified,
+			Crtime:  objInfo.LastModified,
+			Mtime:   objInfo.LastModified,
+			Atime:   objInfo.LastModified,
+		}
+		if err = d.store(tx); err != nil {
+			return err
+		}
+	} // else {
+	// For all other errors this operation fails.
+	return err
+}
+
 func (dir *Dir) scan(ctx context.Context) error {
 	if !dir.needsScan() {
 		return nil
@@ -136,11 +238,9 @@ func (dir *Dir) scan(ctx context.Context) error {
 
 	// we'll compare the current bucket contents against our cache folder, and update the cache
 	if err := b.ForEach(func(k string, o interface{}) error {
-		if k[len(k)-1] == '/' {
-			return nil
+		if k[len(k)-1] != '/' {
+			objects[k] = &o
 		}
-
-		objects[k] = &o
 		return nil
 	}); err != nil {
 		return err
@@ -151,7 +251,7 @@ func (dir *Dir) scan(ctx context.Context) error {
 		prefix = prefix + "/"
 	}
 
-	// the channel will abort the ListObjectsV2 request
+	// The channel will abort the ListObjectsV2 request.
 	doneCh := make(chan struct{})
 	defer close(doneCh)
 
@@ -162,98 +262,20 @@ loop:
 		select {
 		case <-ctx.Done():
 			break loop
-		case message, ok := <-ch:
+		case objInfo, ok := <-ch:
 			if !ok {
 				break loop
 			}
-
-			key := message.Key[len(prefix):]
+			key := objInfo.Key[len(prefix):]
 			baseKey := path.Base(key)
 
 			// object still exists
 			objects[baseKey] = nil
 
 			if strings.HasSuffix(key, "/") {
-				var d Dir
-				if err := b.Get(baseKey, &d); err == nil {
-					d.dir = dir
-					d.mfs = dir.mfs
-				} else if !meta.IsNoSuchObject(err) {
-					return err
-				} else if i, err := dir.mfs.NextSequence(tx); err != nil {
-					return err
-				} else {
-					d = Dir{
-						dir: dir,
-
-						Path:  baseKey,
-						Inode: i,
-
-						Mode: 0770 | os.ModeDir,
-						GID:  dir.mfs.config.gid,
-						UID:  dir.mfs.config.uid,
-
-						Chgtime: message.LastModified,
-						Crtime:  message.LastModified,
-						Mtime:   message.LastModified,
-						Atime:   message.LastModified,
-					}
-
-				}
-
-				if err := d.store(tx); err != nil {
-					return err
-				}
+				dir.storeDir(b, tx, baseKey, objInfo)
 			} else {
-				var f File
-				if err := b.Get(baseKey, &f); err == nil {
-					f.dir = dir
-					f.mfs = dir.mfs
-
-					f.Size = uint64(message.Size)
-					f.ETag = message.ETag
-
-					if message.LastModified.After(f.Chgtime) {
-						f.Chgtime = message.LastModified
-					}
-
-					if message.LastModified.After(f.Crtime) {
-						f.Crtime = message.LastModified
-					}
-
-					if message.LastModified.After(f.Mtime) {
-						f.Mtime = message.LastModified
-					}
-
-					if message.LastModified.After(f.Atime) {
-						f.Atime = message.LastModified
-					}
-				} else if !meta.IsNoSuchObject(err) {
-					return err
-				} else if i, err := dir.mfs.NextSequence(tx); err != nil {
-					return err
-				} else {
-					f = File{
-						dir:  dir,
-						Path: baseKey,
-
-						Size:    uint64(message.Size),
-						Inode:   i,
-						Mode:    dir.mfs.config.mode,
-						GID:     dir.mfs.config.gid,
-						UID:     dir.mfs.config.uid,
-						Chgtime: message.LastModified,
-						Crtime:  message.LastModified,
-						Mtime:   message.LastModified,
-						Atime:   message.LastModified,
-						ETag:    message.ETag,
-					}
-
-				}
-
-				if err := f.store(tx); err != nil {
-					return err
-				}
+				dir.storeFile(b, tx, baseKey, objInfo)
 			}
 		}
 	}
@@ -440,11 +462,11 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 	name := req.Name
 
 	var f File
-	if err := b.Get(name, &f); err == nil {
+	if gerr := b.Get(name, &f); gerr == nil {
 		f.mfs = dir.mfs
 		f.dir = dir
-	} else if i, err := dir.mfs.NextSequence(tx); err != nil {
-		return nil, nil, err
+	} else if i, nerr := dir.mfs.NextSequence(tx); nerr != nil {
+		return nil, nil, nerr
 	} else {
 		f = File{
 			mfs: dir.mfs,
@@ -466,30 +488,24 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 		}
 	}
 
-	if err := f.store(tx); err != nil {
-		return nil, nil, err
+	if serr := f.store(tx); serr != nil {
+		return nil, nil, serr
 	}
 
 	var fh *FileHandle
-	if v, err := dir.mfs.Acquire(&f); err != nil {
+	if fh, err = dir.mfs.Acquire(&f); err != nil {
 		return nil, nil, err
-	} else {
-		fh = v
 	}
-
 	fh.dirty = true
 	if fh.cachePath, err = dir.mfs.NewCachePath(); err != nil {
 		return nil, nil, err
 	}
-
-	if f, err := os.OpenFile(fh.cachePath, int(req.Flags), dir.mfs.config.mode); err == nil {
-		fh.File = f
-	} else {
+	if fh.File, err = os.OpenFile(fh.cachePath, int(req.Flags), dir.mfs.config.mode); err != nil {
 		return nil, nil, err
 	}
 
 	// Commit the transaction and check for error.
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return nil, nil, err
 	}
 

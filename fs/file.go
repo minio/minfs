@@ -155,21 +155,17 @@ func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenR
 			f.Size = 0
 		} else {
 			var r io.Reader
-
 			if object, err := f.mfs.api.GetObject(f.mfs.config.bucket, f.RemotePath()); err == nil {
 				r = object
 				defer object.Close()
-			} else if true /*meta.IsNoSuchObject(err) */ {
-				// todo(nl5887): nosuchobject returns incorrect error
+			} else if meta.IsNoSuchObject(err) {
 				return fuse.ENOENT
 			} else if err != nil {
 				return err
 			}
 
 			hasher := sha256.New()
-
 			r = io.TeeReader(r, hasher)
-
 			if size, err := io.Copy(file, r); err != nil {
 				return err
 			} else {
@@ -180,7 +176,6 @@ func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenR
 			// hash will be used when encrypting files
 			_ = hasher.Sum(nil)
 		}
-
 		return nil
 	}(); err != nil {
 		return nil, err

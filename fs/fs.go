@@ -1,5 +1,5 @@
 /*
- * MinFS for Amazon S3 Compatible Cloud Storage (C) 2015, 2016 Minio, Inc.
+ * MinFS - fuse driver for Object Storage (C) 2016 Minio, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@
 package minfs
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -26,6 +25,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/minio/minfs/meta"
 	"github.com/minio/minfs/queue"
@@ -266,7 +267,7 @@ func (mfs *MinFS) mount() (*fuse.Conn, error) {
 }
 
 // Serve starts the MinFS client
-func (mfs *MinFS) Serve() error {
+func (mfs *MinFS) Serve() (err error) {
 	if mfs.config.debug {
 		fuse.Debug = func(msg interface{}) {
 			fmt.Printf("%#v\n", msg)
@@ -275,50 +276,58 @@ func (mfs *MinFS) Serve() error {
 
 	// initialize
 	fmt.Println("Opening cache database...")
-	if db, err := meta.Open(path.Join(mfs.config.cache, "cache.db"), 0600, nil); err != nil {
+	mfs.db, err = meta.Open(path.Join(mfs.config.cache, "cache.db"), 0600, nil)
+	if err != nil {
 		return err
-	} else {
-		mfs.db = db
 	}
-
 	defer mfs.db.Close()
 
 	fmt.Println("Initializing cache database...")
-	if err := mfs.db.Update(func(tx *meta.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("minio/"))
-		return err
+	if err = mfs.db.Update(func(tx *meta.Tx) error {
+		_, berr := tx.CreateBucketIfNotExists([]byte("minio/"))
+		return berr
 	}); err != nil {
 		return err
 	}
 
 	fmt.Println("Initializing minio client...")
-
 	host := mfs.config.target.Host
 	access := os.Getenv("MINFS_ACCESS")
 	secret := os.Getenv("MINFS_SECRET")
 	secure := mfs.config.target.Scheme == "https"
-	if api, err := minio.New(host, access, secret, secure); err != nil {
+	mfs.api, err = minio.NewV4(host, access, secret, secure)
+	if err != nil {
 		return err
-	} else {
-		mfs.api = api
 	}
-
+	// Validate if the bucket is valid and accessible.
+	exists, err := mfs.api.BucketExists(mfs.config.bucket)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return minio.ErrorResponse{
+			BucketName: mfs.config.bucket,
+			Code:       "NoSuchBucket",
+			Message:    "The specified bucket does not exist",
+		}
+	}
 	// set notifications
 	fmt.Println("Starting notification listener...")
-	if err := mfs.startNotificationListener(); err != nil {
+	if err = mfs.startNotificationListener(); err != nil {
 		return err
 	}
 
 	fmt.Println("Mounting target....")
 	// mount the drive
-	c, err := mfs.mount()
+	var c *fuse.Conn
+	c, err = mfs.mount()
 	if err != nil {
 		return err
 	}
 
 	defer c.Close()
 
-	if err := mfs.startSync(); err != nil {
+	if err = mfs.startSync(); err != nil {
 		return err
 	}
 
@@ -333,13 +342,13 @@ func (mfs *MinFS) Serve() error {
 
 		fmt.Println("Mounted... Have fun!")
 		// serve the filesystem
-		if err := fs.Serve(c, mfs); err != nil {
-			errorCh <- err
+		if serr := fs.Serve(c, mfs); serr != nil {
+			errorCh <- serr
 		}
 	}()
 
 	<-c.Ready
-	if err := c.MountError; err != nil {
+	if err = c.MountError; err != nil {
 		return err
 	}
 
@@ -350,8 +359,8 @@ func (mfs *MinFS) Serve() error {
 loop:
 	for {
 		select {
-		case err := <-errorCh:
-			return err
+		case serr := <-errorCh:
+			return serr
 		case s := <-signalCh:
 			if s == os.Interrupt {
 				fuse.Unmount(mfs.config.mountpoint)
@@ -367,6 +376,11 @@ loop:
 	mfs.stopNotificationListener()
 	fmt.Println("MinFS stopped cleanly.")
 
+	return nil
+}
+
+func (mfs *MinFS) sync(req interface{}) error {
+	mfs.syncChan <- req
 	return nil
 }
 

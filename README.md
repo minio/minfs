@@ -1,13 +1,9 @@
 WARNING: this is a work in progress version, and in no means ready for testing or usage.
 
 # MinFS
-MinFS is a fuse driver for Minio and S3 storage backends. Currently we can list the files, retrieve files. When modifying files, they will be only modified in the cache folder.
+MinFS is a fuse driver for Amazon S3 compatible object storage server. Use it to store photos, videos, VMs, containers, log files, or any blob of data as objects on your object storage server. This fuse driver is meant to be used for legacy applications with object storage.
 
-[BoltDB](https://github.com/boltdb/bolt) is being used for caching and saving metadata, like file listings, permissions, owners and such. Each folder will have its own Bolt bucket where the contents of the folders are placed into.
-
-The cache folder is being used for the BoltDB cache database and the files being cached or modified. It will be always possible to remove the cache folder and cache database. Be careful that MinFS has synchronised the data to the storage. The cache folder will be recreated.
-
-Files that are modified will be queued and uploaded to storage. We're using a defensive locking strategy, that is making MinFS slower, but we'll have less chance of corruption and data loss. Applications will wait for the file to be downloaded first, or till the file has been flushed to the Minio compatible storage. All files are being opened exclusively.
+[BoltDB](https://github.com/boltdb/bolt) is used for caching and saving metadata, list of files, permissions, owners etc. _NOTE: Be careful it is always possible to remove boltdb cache. Cache will be recreated by MinFS synchronizing metadata from the server._
 
 ## Working
 
@@ -15,8 +11,8 @@ The following features are roughly working at the moment:
 
 * list folders and subfolders
 * open and read files
-* create new files 
-* modify existing files 
+* create new files
+* modify existing files
 * move and rename of files
 * copy files
 * delete files
@@ -24,7 +20,7 @@ The following features are roughly working at the moment:
 
 ## Known issues
 
-* renaming directories will cause an error when directly accessing the newly moved folder
+* Renaming directories will cause an error when directly accessing the newly moved folder
 
 ## Build
 
@@ -74,78 +70,69 @@ $ umount /hello
 
 ## Read
 
-Every operation the latest version will be retrieved. We don't have a method of verifying if the file
-has been changed on the provider, so this is the safest and will work in most cases.
+For every operation the latest version will be retrieved from provider. For now we don't have a method of verifying if the file has been changed on the provider.
 
 ## Write
 
-When a **dirty** file has been closed, it will be uploaded to the bucket, when the file is 
-completely uploaded it will be unlocked.
+When a **dirty** file has been closed, it will be uploaded to the bucket, when the file is completely uploaded it will be unlocked.
 
 ## Locking
 
-The locking mechanism is very defensive, only one operation is allowed at a time. This prevents
-issues with synchronization and keeps the fuse driver simple.
+The locking mechanism is very defensive, only one operation is allowed at a time. This prevents issues with synchronization and keeps the fuse driver simple.
 
 ## Frequently asked questions
 
-* if you cannot unmount, try seeing what files are open on the mount. `lsof |grep mount`
+* If you cannot unmount, try seeing what files are open on the mount. `lsof |grep mount`
 
 ## Scenarios
 
-* create a file
-``` 
-echo test > /hello/test
-```
-* append to a file
+* Create a file
 ```
 echo test > /hello/test
 ```
-* make directory
+* Append to a file
+```
+echo test > /hello/test
+```
+* Make directory
 ```
 mkdir /hello/newdir
 ```
-* remove empty directory 
+* Remove empty directory
 ```
 rm -rf /hello/hewdir
 ```
-* copy lot of small files
+* Copy lot of small files
 ```
 cp -r .git /hello/
 ```
-* read and verify a lot of files
+* Read and verify a lot of files
 ```
 diff -r .git /hello/.git/
 ```
-* remove directory with contents
+* Remove directory with contents
 ```
 rm -rf /hello/.git
 ```
-* rename file
+* Rename file
 ```
 mv /hello/test /hello/test2
 ```
-* move file into different directory
+* Move file into different directory
 ```
 mv /hello/test2 /hello/newdir/test2
 ```
-* move directory with contents
+* Move directory with contents
 ```
 mv /hello/newdir /hello/newdir2
 ```
-* check locked file
-```
 
-```
-
-## Todo
+## TODO
 
 There is a long list of todos:
 
-* allow stats to be printed using a signal
-* use Minio notifications to actively update metadata 
-* one mountpoint per bucket
-* each mountpoint will have its own cache folders and can be mounted to one bucket
-* use minio configs? .minfs file for keys?
-* implement encryption support, (a)symmetric
-* mount readonly?
+* Allow stats to be printed using a signal.
+* Use Minio notifications to actively update metadata.
+* One mountpoint per bucket.
+* Each mountpoint will have its own cache folders and can be mounted to one bucket
+* Implement encryption support, (a)symmetric

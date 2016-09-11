@@ -140,6 +140,45 @@ func (f *File) FullPath() string {
 	return path.Join(f.dir.FullPath(), f.Path)
 }
 
+// Saves a new file at cached path and fetches the object based on
+// the incoming fuse request.
+func (f *File) cacheSave(path string, req *fuse.OpenRequest) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	if req.Flags&fuse.OpenTruncate == fuse.OpenTruncate {
+		f.Size = 0
+		return nil
+	}
+
+	object, err := f.mfs.api.GetObject(f.mfs.config.bucket, f.RemotePath())
+	if err != nil {
+		if meta.IsNoSuchObject(err) {
+			return fuse.ENOENT
+		}
+		return err
+	}
+	defer object.Close()
+
+	hasher := sha256.New()
+	size, err := io.Copy(file, io.TeeReader(object, hasher))
+	if err != nil {
+		return err
+	}
+
+	// update actual file size
+	f.Size = uint64(size)
+
+	// hash will be used when encrypting files
+	_ = hasher.Sum(nil)
+
+	// Success.
+	return nil
+}
+
 // Open return a file handle of the opened file
 func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (fs.Handle, error) {
 	if err := f.dir.mfs.wait(f.Path); err != nil {
@@ -159,64 +198,28 @@ func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenR
 		return nil, err
 	}
 
-	if err := func() error {
-		file, err := os.Create(cachePath)
-		if err != nil {
-			return err
-		}
-
-		defer file.Close()
-
-		if req.Flags&fuse.OpenTruncate == fuse.OpenTruncate {
-			f.Size = 0
-		} else {
-			var r io.Reader
-			if object, err := f.mfs.api.GetObject(f.mfs.config.bucket, f.RemotePath()); err == nil {
-				r = object
-				defer object.Close()
-			} else if meta.IsNoSuchObject(err) {
-				return fuse.ENOENT
-			} else if err != nil {
-				return err
-			}
-
-			hasher := sha256.New()
-			r = io.TeeReader(r, hasher)
-			if size, err := io.Copy(file, r); err != nil {
-				return err
-			} else {
-				// update actual file size
-				f.Size = uint64(size)
-			}
-
-			// hash will be used when encrypting files
-			_ = hasher.Sum(nil)
-		}
-		return nil
-	}(); err != nil {
+	err = f.cacheSave(cachePath, req)
+	if err != nil {
 		return nil, err
 	}
 
-	var fh *FileHandle
-	if v, err := f.mfs.Acquire(f); err != nil {
+	fh, err := f.mfs.Acquire(f)
+	if err != nil {
 		return nil, err
-	} else {
-		fh = v
 	}
 
 	fh.cachePath = cachePath
 
-	if file, err := os.OpenFile(fh.cachePath, int(req.Flags), f.mfs.config.mode); err != nil {
-		return nil, err
-	} else {
-		fh.File = file
-	}
-
-	if err := f.store(tx); err != nil {
+	fh.File, err = os.OpenFile(fh.cachePath, int(req.Flags), f.mfs.config.mode)
+	if err != nil {
 		return nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err = f.store(tx); err != nil {
+		return nil, err
+	}
+
+	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
 

@@ -384,55 +384,66 @@ func (mfs *MinFS) sync(req interface{}) error {
 	return nil
 }
 
+func (mfs *MinFS) moveOp(req *MoveOperation) {
+	// TODO: using copyObject limits the size of the server side copy to 5GB (S3 Spec) limit.
+	err := mfs.api.CopyObject(mfs.config.bucket, req.Target, path.Join(mfs.config.bucket, req.Source), minio.NewCopyConditions())
+	if err == nil {
+		err = mfs.api.RemoveObject(mfs.config.bucket, req.Source)
+		if err == nil {
+			req.Error <- nil
+			return
+		}
+	}
+	req.Error <- err
+}
+
+func (mfs *MinFS) copyOp(req *CopyOperation) {
+	// TODO: using copyObject limits the size of the server side copy to 5GB (S3 Spec) limit.
+	err := mfs.api.CopyObject(mfs.config.bucket, req.Target, path.Join(mfs.config.bucket, req.Source), minio.NewCopyConditions())
+	if err == nil {
+		req.Error <- nil
+		return
+	}
+	req.Error <- err
+}
+
+func (mfs *MinFS) putOp(req *PutOperation) {
+	r, err := os.Open(req.Source)
+	if err != nil {
+		req.Error <- err
+		return
+	}
+	defer r.Close()
+
+	// The limited reader will cause truncated files to be uploaded truncated.
+	// The file size is the actual file size, the cache file could not be
+	// truncated yet the SizedLimitedReader ensures that a Content-Length
+	// will be sent, otherwise files with size 0 will not be uploaded
+	slr := NewSizedLimitedReader(r, req.Length)
+	_, err = mfs.api.PutObject(mfs.config.bucket, req.Target, slr, "application/octet-stream")
+	if err != nil {
+		req.Error <- err
+		return
+	}
+	fmt.Printf("Upload finished: %s -> %s.\n", req.Source, req.Target)
+	req.Error <- nil
+}
+
 func (mfs *MinFS) startSync() error {
 	go func() {
 		for req := range mfs.syncChan {
 			switch req := req.(type) {
 			case *MoveOperation:
-				if err := mfs.api.CopyObject(mfs.config.bucket, req.Target, path.Join(mfs.config.bucket, req.Source), minio.NewCopyConditions()); err != nil {
-					req.Error <- err
-					return
-				} else if err := mfs.api.RemoveObject(mfs.config.bucket, req.Source); err != nil {
-					req.Error <- err
-				} else {
-					req.Error <- nil
-				}
+				mfs.moveOp(req)
 			case *CopyOperation:
-				if err := mfs.api.CopyObject(mfs.config.bucket, req.Target, path.Join(mfs.config.bucket, req.Source), minio.NewCopyConditions()); err != nil {
-					req.Error <- err
-					return
-				} else {
-					req.Error <- err
-				}
+				mfs.copyOp(req)
 			case *PutOperation:
-				r, err := os.Open(req.Source)
-				if err != nil {
-					req.Error <- err
-					return
-				}
-				defer r.Close()
-
-				// the limited reader will cause truncated files
-				// to be uploaded truncated. The file size is the actual file size,
-				// the cache file could not be truncated yet
-				// the SizedLimitedReader ensures that a Content-Length will be sent,
-				// otherwise files with size 0 will not be uploaded
-				slr := NewSizedLimitedReader(r, req.Length)
-
-				_, err = mfs.api.PutObject(mfs.config.bucket, req.Target, slr, "application/octet-stream")
-				if err != nil {
-					req.Error <- err
-					return
-				}
-
-				fmt.Printf("Upload finished: %s -> %s.\n", req.Source, req.Target)
-				req.Error <- err
+				mfs.putOp(req)
 			default:
 				panic("Unknown type")
 			}
 		}
 	}()
-
 	return nil
 }
 

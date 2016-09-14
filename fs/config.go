@@ -53,14 +53,14 @@ func Target(target string) func(*Config) {
 		if u, err := url.Parse(target); err == nil {
 			cfg.target = u
 
-			parts := strings.Split(u.Path[1:], "/")
-
-			if len(parts) >= 0 {
-				cfg.bucket = parts[0]
-			}
-
-			if len(parts) >= 1 {
-				cfg.basePath = path.Join(parts[1:]...)
+			if len(u.Path) > 1 {
+				parts := strings.Split(u.Path[1:], "/")
+				if len(parts) >= 0 {
+					cfg.bucket = parts[0]
+				}
+				if len(parts) >= 1 {
+					cfg.basePath = path.Join(parts[1:]...)
+				}
 			}
 		}
 	}

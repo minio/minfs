@@ -129,12 +129,14 @@ func Main() {
 				} else {
 					opts = append(opts, minfs.CacheDir(vals[1]))
 				}
+			case "debug":
+				opts = append(opts, minfs.Debug())
 			}
 
 			target := c.Args().Get(0)
 			mountpoint := c.Args().Get(1)
 
-			opts = append(opts, minfs.Mountpoint(mountpoint), minfs.Target(target), minfs.Debug())
+			opts = append(opts, minfs.Mountpoint(mountpoint), minfs.Target(target))
 		}
 
 		fs, err := minfs.New(opts...)

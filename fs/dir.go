@@ -17,7 +17,6 @@
 package minfs
 
 import (
-	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -335,9 +334,7 @@ func (dir *Dir) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 }
 
 func (dir *Dir) bucket(tx *meta.Tx) *meta.Bucket {
-	// root folder
-	fmt.Printf("BUCKET %s %#v\n", dir.Path, *dir)
-
+	// Root folder.
 	if dir.dir == nil {
 		return tx.Bucket("minio/")
 	}

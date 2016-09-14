@@ -17,7 +17,6 @@
 package minfs
 
 import (
-	"fmt"
 	"io"
 	"os"
 
@@ -76,7 +75,7 @@ func (fh *FileHandle) Write(ctx context.Context, req *fuse.WriteRequest, resp *f
 
 // Fsync because of bug in fuse lib, this is on file. -- FIXME - needs more context (y4m4).
 func (f *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) error {
-	fmt.Println("fsync", f.FullPath())
+	// fmt.Println("fsync", f.FullPath())
 	return nil
 }
 

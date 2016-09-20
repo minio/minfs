@@ -17,7 +17,9 @@
 package minfs
 
 import (
+	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -31,6 +33,8 @@ type Config struct {
 
 	cache      string
 	accountID  string
+	accessKey  string
+	secretKey  string
 	target     *url.URL
 	mountpoint string
 	debug      bool
@@ -38,6 +42,55 @@ type Config struct {
 	uid  uint32
 	gid  uint32
 	mode os.FileMode
+}
+
+type accessConfig struct {
+	Version   string `json:"version"`
+	AccessKey string `json:"accessKey"`
+	SecretKey string `json:"secretKey"`
+}
+
+// Initialize MinFS configuration file.
+func initMinFSConfig() (*accessConfig, error) {
+	// Create db directory.
+	if err := os.MkdirAll(globalDBDir, 0777); err != nil {
+		return nil, err
+	}
+	// Config doesn't exist create it based on environment values.
+	if _, err := os.Stat(globalConfigFile); err != nil {
+		if os.IsNotExist(err) {
+			ac := &accessConfig{
+				Version:   "1",
+				AccessKey: os.Getenv("MINFS_ACCESS"),
+				SecretKey: os.Getenv("MINFS_SECRET"),
+			}
+			acBytes, jerr := json.Marshal(ac)
+			if jerr != nil {
+				return nil, jerr
+			}
+			if err = ioutil.WriteFile(globalConfigFile, acBytes, 0666); err != nil {
+				return nil, err
+			}
+			return ac, nil
+		} // Exists but not accessible, fail.
+		return nil, err
+	} // Config exists, proceed to read.
+	acBytes, err := ioutil.ReadFile(globalConfigFile)
+	if err != nil {
+		return nil, err
+	}
+	ac := &accessConfig{}
+	if err = json.Unmarshal(acBytes, ac); err != nil {
+		return nil, err
+	}
+	// Override if access keys are set through env.
+	accessKey := os.Getenv("MINFS_ACCESS")
+	secretKey := os.Getenv("MINFS_SECRET")
+	if accessKey != "" && secretKey != "" {
+		ac.AccessKey = accessKey
+		ac.SecretKey = secretKey
+	}
+	return ac, nil
 }
 
 // Mountpoint configures the target mountpoint

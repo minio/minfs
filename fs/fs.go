@@ -19,6 +19,7 @@ package minfs
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"path"
@@ -48,6 +49,9 @@ type MinFS struct {
 
 	db *meta.DB
 
+	// Logger instance.
+	log *log.Logger
+
 	// contains all open handles
 	handles []*FileHandle
 
@@ -62,13 +66,27 @@ type MinFS struct {
 
 // New will return a new MinFS client
 func New(options ...func(*Config)) (*MinFS, error) {
-	// set defaults
+	// Initialize config.
+	ac, err := initMinFSConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	// Initialize log file.
+	logW, err := os.OpenFile(globalLogFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set defaults
 	cfg := &Config{
-		cache:     "./cache/",
+		cache:     globalDBDir,
 		basePath:  "",
 		accountID: fmt.Sprintf("%d", time.Now().UTC().Unix()),
 		gid:       0,
 		uid:       0,
+		accessKey: ac.AccessKey,
+		secretKey: ac.SecretKey,
 		mode:      os.FileMode(0660),
 	}
 
@@ -80,20 +98,22 @@ func New(options ...func(*Config)) (*MinFS, error) {
 		return nil, err
 	}
 
+	// Initialize MinFS.
 	fs := &MinFS{
 		config:   cfg,
 		syncChan: make(chan interface{}),
 		locks:    map[string]bool{},
+		log:      log.New(logW, "MinFS ", log.Ldate|log.Ltime|log.Lshortfile),
 	}
 
+	// Success..
 	return fs, nil
 }
 
 func (mfs *MinFS) updateMetadata() error {
 	for {
-		// updates metadata periodically. This is being used when notification listener
-		// is not available
-		time.Sleep(time.Second * 1)
+		// Updates metadata periodically. This is being used when notification listener is not available
+		time.Sleep(time.Second * 2) // Every 2 secs.
 	}
 }
 
@@ -111,19 +131,19 @@ func (mfs *MinFS) mount() (*fuse.Conn, error) {
 func (mfs *MinFS) Serve() (err error) {
 	if mfs.config.debug {
 		fuse.Debug = func(msg interface{}) {
-			//	fmt.Printf("%#v\n", msg)
+			mfs.log.Printf("%#v\n", msg)
 		}
 	}
 
-	// initialize
-	fmt.Println("Opening cache database...")
+	// Initialize database.
+	mfs.log.Println("Opening cache database...")
 	mfs.db, err = meta.Open(path.Join(mfs.config.cache, "cache.db"), 0600, nil)
 	if err != nil {
 		return err
 	}
 	defer mfs.db.Close()
 
-	fmt.Println("Initializing cache database...")
+	mfs.log.Println("Initializing cache database...")
 	if err = mfs.db.Update(func(tx *meta.Tx) error {
 		_, berr := tx.CreateBucketIfNotExists([]byte("minio/"))
 		return berr
@@ -131,10 +151,10 @@ func (mfs *MinFS) Serve() (err error) {
 		return err
 	}
 
-	fmt.Println("Initializing minio client...")
+	mfs.log.Println("Initializing minio client...")
 	host := mfs.config.target.Host
-	access := os.Getenv("MINFS_ACCESS")
-	secret := os.Getenv("MINFS_SECRET")
+	access := mfs.config.accessKey
+	secret := mfs.config.secretKey
 	secure := mfs.config.target.Scheme == "https"
 	mfs.api, err = minio.NewV4(host, access, secret, secure)
 	if err != nil {
@@ -158,7 +178,7 @@ func (mfs *MinFS) Serve() (err error) {
 	//	return err
 	// }
 
-	fmt.Println("Mounting target....")
+	mfs.log.Println("Mounting target....")
 	// mount the drive
 	var c *fuse.Conn
 	c, err = mfs.mount()
@@ -181,7 +201,7 @@ func (mfs *MinFS) Serve() (err error) {
 	go func() {
 		defer wg.Done()
 
-		fmt.Println("Mounted... Have fun!")
+		mfs.log.Println("Mounted... Have fun!")
 		// serve the filesystem
 		if serr := fs.Serve(c, mfs); serr != nil {
 			errorCh <- serr
@@ -215,7 +235,7 @@ loop:
 	wg.Wait()
 
 	// mfs.stopNotificationListener()
-	fmt.Println("MinFS stopped cleanly.")
+	mfs.log.Println("MinFS stopped cleanly.")
 
 	return nil
 }
@@ -266,7 +286,7 @@ func (mfs *MinFS) putOp(req *PutOperation) {
 		req.Error <- err
 		return
 	}
-	fmt.Printf("Upload finished: %s -> %s.\n", req.Source, req.Target)
+	mfs.log.Printf("Upload finished: %s -> %s.\n", req.Source, req.Target)
 	req.Error <- nil
 }
 

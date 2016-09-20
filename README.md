@@ -45,13 +45,13 @@ $ sudo ln -s $GOPATH/bin/minfs /sbin/mount_minfs
 ## Mount on Linux and OS X
 
 ```
-$ sudo MINFS_ACCESS=AKIAIOSFODNN7EXAMPLE MINFS_SECRET=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY mount -t minfs http://172.16.84.1:9000/asiatrip /hello
+$ sudo mount -t minfs -o gid=0,uid=0 http://172.16.84.1:9000/asiatrip /hello
 ```
 
 It is possible to mount a directory in a bucket to a mountpoint. Just append the directory to the source url. E.g
 
 ```
-$ sudo MINFS_ACCESS=AKIAIOSFODNN7EXAMPLE MINFS_SECRET=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY mount -t minfs http://172.16.84.1:9000/asiatrip/dir1/ /hello
+$ sudo mount -t minfs -o gid=0,uid=0 http://172.16.84.1:9000/asiatrip/dir1 /hello
 ```
 
 ## Unmount

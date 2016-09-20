@@ -270,7 +270,7 @@ func (mfs *MinFS) mount() (*fuse.Conn, error) {
 func (mfs *MinFS) Serve() (err error) {
 	if mfs.config.debug {
 		fuse.Debug = func(msg interface{}) {
-			fmt.Printf("%#v\n", msg)
+			//	fmt.Printf("%#v\n", msg)
 		}
 	}
 
@@ -438,6 +438,11 @@ func (mfs *MinFS) startSync() error {
 
 // Statfs will return meta information on the minio filesystem
 func (mfs *MinFS) Statfs(ctx context.Context, req *fuse.StatfsRequest, resp *fuse.StatfsResponse) error {
+	resp.Blocks = 0x1000000000
+	resp.Bfree = 0x1000000000
+	resp.Bavail = 0x1000000000
+	resp.Namelen = 32768
+	resp.Bsize = 1024
 	return nil
 }
 

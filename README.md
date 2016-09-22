@@ -26,7 +26,7 @@ The following features are roughly working at the moment:
 
 ```
 $ go get -d github.com/minio/minfs
-$ cd $GOPATH/minio/minfs
+$ cd $GOPATH/src/github.com/minio/minfs
 $ make
 ```
 

@@ -202,10 +202,8 @@ func (mfs *MinFS) Serve() (err error) {
 		defer wg.Done()
 
 		mfs.log.Println("Mounted... Have fun!")
-		// serve the filesystem
-		if serr := fs.Serve(c, mfs); serr != nil {
-			errorCh <- serr
-		}
+		// Serve the filesystem
+		errorCh <- fs.Serve(c, mfs)
 	}()
 
 	<-c.Ready

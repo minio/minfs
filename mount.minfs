@@ -12,32 +12,14 @@ _init ()
     export PATH
     prefix="/sbin";
     cmd_line=$(echo "/sbin/minfs");
-
     mounttab=/proc/mounts
-    uname_s=`uname -s`
-    case ${uname_s} in
-        Linux)
-            getinode="stat -c %i"
-            ;;
-    esac
-
     UPDATEDBCONF="/etc/updatedb.conf"
 }
 
 start_minfs ()
 {
     cmd_line=$(echo "$cmd_line $mount_opts $minio_endpoint $mount_point");
-    $cmd_line;
-    if [ $? -ne 0 ]; then
-        exit 1;
-    fi
-
-    inode=$( ${getinode} $mount_point 2>/dev/null);
-    # this is required if the stat returns error
-    if [ $? -ne 0 ]; then
-        umount $mount_point > /dev/null 2>&1;
-        exit 1;
-    fi
+    sh -c "nohup $cmd_line &>/dev/null"
 }
 
 print_usage ()
@@ -64,11 +46,9 @@ update_updatedb()
 
 main ()
 {
-    if [ "x${uname_s}" = "xLinux" ] ; then
-        minio_endpoint=$1
-        mount_point=$2
-        mount_opts=$3
-    fi
+    minio_endpoint=$1
+    mount_point=$2
+    mount_opts=$3
     if [ "x${mount_opts}" = "x-o" ] ; then
         mount_opts=""
     fi

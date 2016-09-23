@@ -33,25 +33,21 @@ $ make
 ## Installation on Linux
 
 ```
-$ sudo ln -s $GOPATH/bin/minfs /sbin/mount.minfs
+$ sudo cp -pv $GOPATH/bin/minfs /sbin/minfs
+$ sudo cp -pv mount.minfs /sbin/mount.minfs
 ```
 
-## Installation on OS X
+## Mount on Linux
 
 ```
-$ sudo ln -s $GOPATH/bin/minfs /sbin/mount_minfs
+$ sudo mount -t minfs http://172.16.84.1:9000/asiatrip /hello
 ```
 
-## Mount on Linux and OS X
+## Mount on Linux `/etc/fstab`
 
 ```
-$ sudo mount -t minfs -o gid=0,uid=0 http://172.16.84.1:9000/asiatrip /hello
-```
-
-It is possible to mount a directory in a bucket to a mountpoint. Just append the directory to the source url. E.g
-
-```
-$ sudo mount -t minfs -o gid=0,uid=0 http://172.16.84.1:9000/asiatrip/dir1 /hello
+$ grep minfs /etc/fstab
+http://172.16.84.1:9000/asiatrip /hello minfs defaults 0 0
 ```
 
 ## Unmount

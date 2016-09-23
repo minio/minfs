@@ -1,0 +1,121 @@
+#!/bin/sh
+#
+
+warn ()
+{
+   echo "$@" >&2
+}
+
+_init ()
+{
+    PATH=/sbin:/bin:/usr/bin:/usr/sbin:$PATH
+    export PATH
+    prefix="/sbin";
+    cmd_line=$(echo "/sbin/minfs");
+
+    mounttab=/proc/mounts
+    uname_s=`uname -s`
+    case ${uname_s} in
+        Linux)
+            getinode="stat -c %i"
+            ;;
+    esac
+
+    UPDATEDBCONF="/etc/updatedb.conf"
+}
+
+start_minfs ()
+{
+    cmd_line=$(echo "$cmd_line $mount_opts $minio_endpoint $mount_point");
+    $cmd_line;
+    if [ $? -ne 0 ]; then
+        exit 1;
+    fi
+
+    inode=$( ${getinode} $mount_point 2>/dev/null);
+    # this is required if the stat returns error
+    if [ $? -ne 0 ]; then
+        umount $mount_point > /dev/null 2>&1;
+        exit 1;
+    fi
+}
+
+print_usage ()
+{
+cat << EOF
+USAGE: $0 -o<options> <endpoint>/<bucket> <mountpoint>
+To display the version number of the mount helper: $0 -V
+EOF
+}
+
+update_updatedb()
+{
+    # Append MinFS to PRUNEFS variable in updatedb.conf(5).
+    # updatedb(8) should not index files under MinFS. MinFS
+    # does its own indexing.
+    test -f $UPDATEDBCONF && {
+        if ! grep -q 'fuse.MinFS' $UPDATEDBCONF; then
+            sed 's/\(PRUNEFS.*\)"/\1 fuse.MinFS"/' $UPDATEDBCONF \
+                > ${UPDATEDBCONF}.bak
+            mv -f ${UPDATEDBCONF}.bak $UPDATEDBCONF
+        fi
+    }
+}
+
+main ()
+{
+    if [ "x${uname_s}" = "xLinux" ] ; then
+        minio_endpoint=$1
+        mount_point=$2
+        mount_opts=$3
+    fi
+    if [ "x${mount_opts}" = "x-o" ] ; then
+        mount_opts=""
+    fi
+    while getopts "Vh" opt; do
+        case "${opt}" in
+            V)
+                ${cmd_line} | grep -A1 VERSION;
+                exit 0;
+                ;;
+            h)
+                print_usage;
+                exit 0;
+                ;;
+            ?)
+                print_usage;
+                exit 0;
+                ;;
+        esac
+    done
+
+    grep_ret=$(echo ${mount_point} | grep '^\-o');
+    [ "x" != "x${grep_ret}" ] && {
+        cat <<EOF >&2
+-o options cannot be specified in either first two arguments. Please specify correct style.
+EOF
+        exit 1;
+    }
+
+    # No need to do a ! -d test, it is taken care while initializing the
+    # variable mount_point
+    [ -z "$mount_point" -o ! -d "$mount_point" ] && {
+        cat <<EOF >&2
+Mount point does not exist, Please specify a valid mount point.
+EOF
+        exit 1;
+    }
+
+    # Simple check to avoid multiple identical mounts
+    if grep -q "[[:space:]+]${mount_point}[[:space:]+]fuse" $mounttab; then
+        warn "$0: according to mtab, MinFS is already mounted on" \
+             "$mount_point"
+        exit 32;
+    fi
+
+    update_updatedb;
+
+    start_minfs;
+}
+
+_init "$@" && main "$@";

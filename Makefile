@@ -54,6 +54,8 @@ test: getdeps verifiers
 gomake-all: build
 	@echo "Installing minfs:"
 	@go build --ldflags "$(LDFLAGS)" -o $(GOPATH)/bin/minfs
+	@sudo cp -v $(GOPATH)/bin/minfs /sbin/minfs
+	@sudo cp -pv mount.minfs /sbin/mount.minfs
 
 coverage: getdeps verifiers
 	@echo "Running all coverage:"

@@ -23,7 +23,7 @@ _init() {
     fi
 
     # List of supported architectures
-    SUPPORTED_OSARCH='linux/386 linux/amd64 linux/arm windows/386 windows/amd64 darwin/amd64 solaris/amd64 freebsd/amd64'
+    SUPPORTED_OSARCH='linux/386 linux/amd64 linux/arm'
 
     ## System binaries
     CP=`which cp`

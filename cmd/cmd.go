@@ -94,9 +94,6 @@ func Main() {
 	app.Flags = append(minfsFlags, globalFlags...)
 	app.CustomAppHelpTemplate = minfsHelpTemplate
 	app.Before = func(c *cli.Context) error {
-		if !c.IsSet("o") {
-			cli.ShowAppHelpAndExit(c, 1)
-		}
 		if !c.Args().Present() {
 			cli.ShowAppHelpAndExit(c, 1)
 		}

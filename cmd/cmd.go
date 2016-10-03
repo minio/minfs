@@ -62,6 +62,10 @@ FLAGS:
   {{end}}{{end}}
 VERSION:
   ` + Version +
+	`{{ "\n"}}` +
+	`
+COMMITID:
+  ` + CommitID +
 	`{{ "\n"}}`
 
 // Main is the actual run function

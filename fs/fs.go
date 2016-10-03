@@ -67,7 +67,7 @@ type MinFS struct {
 // New will return a new MinFS client
 func New(options ...func(*Config)) (*MinFS, error) {
 	// Initialize config.
-	ac, err := initMinFSConfig()
+	ac, err := InitMinFSConfig()
 	if err != nil {
 		return nil, err
 	}

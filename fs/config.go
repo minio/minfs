@@ -44,14 +44,15 @@ type Config struct {
 	mode os.FileMode
 }
 
-type accessConfig struct {
+// AccessConfig - access credentials and version of `config.json`.
+type AccessConfig struct {
 	Version   string `json:"version"`
 	AccessKey string `json:"accessKey"`
 	SecretKey string `json:"secretKey"`
 }
 
-// Initialize MinFS configuration file.
-func initMinFSConfig() (*accessConfig, error) {
+// InitMinFSConfig - Initialize MinFS configuration file.
+func InitMinFSConfig() (*AccessConfig, error) {
 	// Create db directory.
 	if err := os.MkdirAll(globalDBDir, 0777); err != nil {
 		return nil, err
@@ -59,7 +60,7 @@ func initMinFSConfig() (*accessConfig, error) {
 	// Config doesn't exist create it based on environment values.
 	if _, err := os.Stat(globalConfigFile); err != nil {
 		if os.IsNotExist(err) {
-			ac := &accessConfig{
+			ac := &AccessConfig{
 				Version:   "1",
 				AccessKey: os.Getenv("MINFS_ACCESS"),
 				SecretKey: os.Getenv("MINFS_SECRET"),
@@ -79,7 +80,7 @@ func initMinFSConfig() (*accessConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	ac := &accessConfig{}
+	ac := &AccessConfig{}
 	if err = json.Unmarshal(acBytes, ac); err != nil {
 		return nil, err
 	}

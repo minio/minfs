@@ -98,6 +98,10 @@ func Main() {
 	app.Flags = append(minfsFlags, globalFlags...)
 	app.CustomAppHelpTemplate = minfsHelpTemplate
 	app.Before = func(c *cli.Context) error {
+		_, err := minfs.InitMinFSConfig()
+		if err != nil {
+			console.Fatalln("Unable to initialize minfs config", err)
+		}
 		if !c.Args().Present() {
 			cli.ShowAppHelpAndExit(c, 1)
 		}

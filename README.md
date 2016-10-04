@@ -3,28 +3,54 @@ MinFS is a fuse driver for Amazon S3 compatible object storage server. Use it to
 
 [BoltDB](https://github.com/boltdb/bolt) is used for caching and saving metadata, list of files, permissions, owners etc. _NOTE: Be careful it is always possible to remove boltdb cache. Cache will be recreated by MinFS synchronizing metadata from the server.
 
-## Installation
+## Install from RPMs.
 
-```
-$ go get -d github.com/minio/minfs
-$ cd $GOPATH/src/github.com/minio/minfs
-$ make
+Download the [latest RPM](https://github.com/minio/minfs/releases/download/RELEASE.2016-10-03T06-23-33Z/minfs-0.0.20161003062333-1.x86_64.rpm) from here.
+
+```sh
+$ sudo yum install minfs-0.0.20161003062333-1.x86_64.rpm -y
 ```
 
-## Installation on Linux
+## Install from source.
 
+Source installation is only intended for developers and advanced users. If you do not have a working Golang environment, please follow [How to install Golang](https://docs.minio.io/docs/how-to-install-golang).
+
+
+```sh
+$ go get -u github.com/minio/minfs
 ```
-$ sudo cp -pv $GOPATH/bin/minfs /sbin/minfs
-$ sudo cp -pv mount.minfs /sbin/mount.minfs
+
+
+## Adding your credentials in `config.json`.
+
+Before mounting you need to update access credentials in `config.json`. By default `config.json` is generated at `/etc/minfs`. `config.json` comes with default empty credentials which needs to be updated with your S3 server credentials. This is a one time activity and the same `config.json` can be copied on all the other `minfs` nodes as well.
+
+```sh
+$ vi /etc/minfs/config.json
 ```
+
+Default `config.json`.
+```json
+{"version":"1","accessKey":"","secretKey":""}
+```
+
+`config.json` updated with access credentials.
+```json
+{"version":"1","accessKey":"Q3AM3UQ867SPQQA43P2F","secretKey":"zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG"}
+```
+
+Once your have successfully updated `config.json`, we will proceed to mounting.
 
 ## Mount on Linux
 
+Before mounting you need to know the endpoint of your S3 server and also the `bucketName` that you are going to use.
 ```
 $ sudo mount -t minfs http://172.16.84.1:9000/asiatrip /hello
 ```
 
 ## Mount on Linux `/etc/fstab`
+
+`/etc/fstab` can be edited as well in following format as shown below.
 
 ```
 $ grep minfs /etc/fstab

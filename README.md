@@ -5,10 +5,10 @@ MinFS is a fuse driver for Amazon S3 compatible object storage server. Use it to
 
 ## Install from RPMs.
 
-Download the [latest RPM](https://github.com/minio/minfs/releases/download/RELEASE.2016-10-03T06-23-33Z/minfs-0.0.20161003062333-1.x86_64.rpm) from here.
+Download the [latest RPM](https://github.com/minio/minfs/releases/download/RELEASE.2016-10-04T19-44-43Z/minfs-0.0.20161004194443-1.x86_64.rpm) from here.
 
 ```sh
-$ sudo yum install minfs-0.0.20161003062333-1.x86_64.rpm -y
+$ sudo yum install minfs-0.0.20161004194443-1.x86_64.rpm -y
 ```
 
 ## Install from source.

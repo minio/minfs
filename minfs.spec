@@ -1,8 +1,8 @@
-%define		tag	RELEASE.2016-10-03T06-23-33Z
+%define		tag	RELEASE.2016-10-04T19-44-43Z
 %define		subver	%(echo %{tag} | sed -e 's/[^0-9]//g')
-# git fetch https://github.com/minio/minfs.git refs/tags/RELEASE.2016-10-03T06-23-33Z
+# git fetch https://github.com/minio/minfs.git refs/tags/RELEASE.2016-10-04T19-44-43Z
 # git rev-list -n 1 FETCH_HEAD
-%define         commitid 172bb0743aa1a608bb546c91137fb3da5c0f5360
+%define         commitid c88fb0f2eda862b424347728c9bfc00dc17c33c1
 
 ##-----------------------------------------------------------------------------
 ## All package definitions should be placed here in alphabetical order

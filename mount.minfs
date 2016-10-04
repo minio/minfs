@@ -19,7 +19,7 @@ _init ()
 start_minfs ()
 {
     cmd_line=$(echo "$cmd_line $mount_opts $minio_endpoint $mount_point");
-    sh -c "nohup $cmd_line >/dev/null &"
+    sh -c "$cmd_line &"
 }
 
 print_usage ()

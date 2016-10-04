@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Minio Client, (C) 2015 Minio, Inc.
+# MinFS is a fuse driver, (C) 2014-2016 Minio, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ _init() {
 
     ## Minimum required versions for build dependencies
     GIT_VERSION="1.0"
-    GO_VERSION="1.6"
+    GO_VERSION="1.7"
     OSX_VERSION="10.8"
     UNAME=$(uname -sm)
 
@@ -53,8 +53,8 @@ readlink() {
 ###
 #
 # Takes two arguments
-# arg1: version number in `x.x.x` format or `devel`
-# arg2: version number in `x.x.x` format or `devel`
+# arg1: version number in `x.x.x` format
+# arg2: version number in `x.x.x` format
 #
 # example: check_version "$version1" "$version2"
 #
@@ -76,14 +76,6 @@ check_version() {
 
     local IFS=.
     local i ver1=($1) ver2=($2)
-
-    if [ "$ver1" = "devel" ]; then
-	    return 1
-    fi
-    if [ "$ver2" = "devel" ]; then
-	    return 2
-    fi
-
     # fill empty fields in ver1 with zeros
     for ((i=${#ver1[@]}; i<${#ver2[@]}; i++)); do
         ver1[i]=0
@@ -94,6 +86,7 @@ check_version() {
             ver2[i]=0
         fi
         if ((10#${ver1[i]} > 10#${ver2[i]})); then
+
             return 1
         fi
         if ((10#${ver1[i]} < 10#${ver2[i]})); then
@@ -105,14 +98,6 @@ check_version() {
 }
 
 check_golang_env() {
-    echo ${GOROOT:?} 2>&1 >/dev/null
-    if [ $? -eq 1 ]; then
-        echo "ERROR"
-        echo "GOROOT environment variable missing, please refer to Go installation document"
-        echo "https://github.com/minio/minfs/blob/master/INSTALLGO.md#install-go-13"
-        exit 1
-    fi
-
     echo ${GOPATH:?} 2>&1 >/dev/null
     if [ $? -eq 1 ]; then
         echo "ERROR"
@@ -122,52 +107,30 @@ check_golang_env() {
     fi
 
     local go_binary_path=$(which go)
-
     if [ -z "${go_binary_path}" ] ; then
         echo "Cannot find go binary in your PATH configuration, please refer to Go installation document"
-        echo "https://github.com/minio/minfs/blob/master/INSTALLGO.md#install-go-13"
-        exit -1
-    fi
-
-    local new_go_binary_path=${go_binary_path}
-    if [ -h "${go_binary_path}" ]; then
-        new_go_binary_path=$(readlink ${go_binary_path})
-    fi
-
-    if [[ !"$(dirname ${new_go_binary_path})" =~ *"${GOROOT%%*(/)}"* ]] ; then
-        echo "The go binary found in your PATH configuration does not belong to the Go installation pointed by your GOROOT environment," \
-            "please refer to Go installation document"
         echo "https://github.com/minio/minfs/blob/master/INSTALLGO.md#install-go-13"
         exit -1
     fi
 }
 
 is_supported_os() {
-    local supported
     case ${UNAME%% *} in
         "Linux")
-	    supported=1
+            os="linux"
+            ;;
+        "FreeBSD")
+            os="freebsd"
             ;;
         "Darwin")
             osx_host_version=$(env sw_vers -productVersion)
             check_version "${osx_host_version}" "${OSX_VERSION}"
             [[ $? -ge 2 ]] && die "Minimum OSX version supported is ${OSX_VERSION}"
-	    supported=1
             ;;
-        "SunOS")
-	    supported=1
-            ;;
-        "FreeBSD")
-            supported=1
-	    ;;
         "*")
-	    supported=0
-	    ;;
+            echo "Exiting.. unsupported operating system found"
+            exit 1;
     esac
-    if [ "x$supported" != "x1" ]; then
-        echo "Invalid os: ${UNAME} not supported"
-        exit 1;
-    fi
 }
 
 is_supported_arch() {
@@ -179,28 +142,26 @@ is_supported_arch() {
         "arm"*)
             supported=1
             ;;
-        "i86pc"*)
-            supported=1
-            ;;
         *)
             supported=0
             ;;
     esac
-    if [ "x$supported" != "x1" ]; then
-        echo "Invalid arch: ${UNAME} not supported"
+    if [ $supported -eq 0 ]; then
+        echo "Invalid arch: ${UNAME} not supported, please use x86_64/amd64"
         exit 1;
     fi
 }
 
 check_deps() {
-    check_version "$(env go version 2>/dev/null | awk '{print $3}' | sed 's/go\([0-9.]*\)$/\1/')" "${GO_VERSION}"
+    go_version=$(env go version 2>/dev/null)
+    check_version "$(echo ${go_version} | sed 's/^.* go\([0-9.]*\).*$/\1/')" "${GO_VERSION}"
     if [ $? -ge 2 ]; then
-        MISSING="${MISSING} golang(>=${GO_VERSION})"
+        MISSING="${MISSING} golang(${GO_VERSION})"
     fi
 
     check_version "$(env git --version 2>/dev/null | sed -e 's/^.* \([0-9.\].*\).*$/\1/' -e 's/^\([0-9.\]*\).*/\1/g')" "${GIT_VERSION}"
     if [ $? -ge 2 ]; then
-        MISSING="${MISSING} git(>=${GIT_VERSION})"
+        MISSING="${MISSING} git"
     fi
 }
 
@@ -215,9 +176,9 @@ main() {
     check_golang_env
 
     echo "Done"
-    echo "Using GOPATH=${GOPATH} and GOROOT=${GOROOT}"
+    echo "Using GOPATH=${GOPATH}"
 
-    echo -n "Checking dependencies for Minio Client.. "
+    echo -n "Checking dependencies for Minio.. "
     check_deps
 
     ## If dependencies are missing, warn the user and abort
@@ -231,7 +192,7 @@ main() {
         echo "Please install them "
         echo "${MISSING}"
         echo
-        echo "Follow https://github.com/minio/minfs/blob/master/INSTALLGO.md for further instructions"
+        echo "Follow https://docs.minio.io/docs/how-to-install-golang for further instructions"
         exit 1
     fi
     echo "Done"

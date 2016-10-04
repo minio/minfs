@@ -5,4 +5,5 @@ cover.out
 release
 experimental
 cache
+minfs
 coverage.txt

@@ -49,7 +49,7 @@ test: getdeps verifiers
 
 gomake-all: build
 	@echo "Installing minfs:"
-	@go build --ldflags "$(LDFLAGS)" minfs
+	@go build --ldflags "$(LDFLAGS)" github.com/minio/minfs
 
 coverage: getdeps verifiers
 	@echo "Running all coverage:"

@@ -19,7 +19,7 @@ _init ()
 start_minfs ()
 {
     cmd_line=$(echo "$cmd_line $mount_opts $minio_endpoint $mount_point");
-    sh -c "$cmd_line &"
+    sh -c "$cmd_line &>/dev/null"
 }
 
 print_usage ()
@@ -50,7 +50,7 @@ main ()
     mount_point=$2
     mount_opts=$3
     if [ "x${mount_opts}" = "x-o" ] ; then
-        mount_opts=""
+        mount_opts="$3 $4"
     fi
     while getopts "Vh" opt; do
         case "${opt}" in

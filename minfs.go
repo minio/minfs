@@ -1,5 +1,5 @@
 /*
- * MinFS - fuse driver for Object Storage (C) 2016 Minio, Inc.
+ * MinFS - fuse driver for Object Storage (C) 2016, 2017 Minio, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,9 @@
  * limitations under the License.
  */
 
-package main
+package main // import "github.com/minio/minfs"
 
-import (
-	minfs "github.com/minio/minfs/cmd"
-)
-
-func init() {
-}
+import minfs "github.com/minio/minfs/cmd"
 
 func main() {
 	minfs.Main()

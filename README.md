@@ -20,6 +20,7 @@ Source installation is only intended for developers and advanced users. If you d
 $ go get -u -d github.com/minio/minfs
 $ cd $GOPATH/src/github.com/minio/minfs
 $ make
+$ sudo make install
 ```
 
 

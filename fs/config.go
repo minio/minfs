@@ -65,8 +65,8 @@ func InitMinFSConfig() (*AccessConfig, error) {
 			console.Println("Initializing config.json for the first time, please update your access credentials.")
 			ac := &AccessConfig{
 				Version:   "1",
-				AccessKey: os.Getenv("MINFS_ACCESS"),
-				SecretKey: os.Getenv("MINFS_SECRET"),
+				AccessKey: os.Getenv("MINFS_ACCESS_KEY"),
+				SecretKey: os.Getenv("MINFS_SECRET_KEY"),
 			}
 			acBytes, jerr := json.Marshal(ac)
 			if jerr != nil {
@@ -88,8 +88,8 @@ func InitMinFSConfig() (*AccessConfig, error) {
 		return nil, err
 	}
 	// Override if access keys are set through env.
-	accessKey := os.Getenv("MINFS_ACCESS")
-	secretKey := os.Getenv("MINFS_SECRET")
+	accessKey := os.Getenv("MINFS_ACCESS_KEY")
+	secretKey := os.Getenv("MINFS_SECRET_KEY")
 	if accessKey != "" && secretKey != "" {
 		ac.AccessKey = accessKey
 		ac.SecretKey = secretKey

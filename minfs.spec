@@ -64,6 +64,8 @@ install -d $RPM_BUILD_ROOT%{_sysconfdir}/minfs
 install -d $RPM_BUILD_ROOT%{_sysconfdir}/minfs/db
 install -p %{name} $RPM_BUILD_ROOT%{_sbindir}
 install -p mount.minfs $RPM_BUILD_ROOT%{_sbindir}
+install -m 644 minfs.8 $RPM_BUILD_ROOT%{_mandir}/man8
+install -m 644 mount.minfs.8 $RPM_BUILD_ROOT%{_mandir}/man8
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -71,5 +73,6 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(644,root,root,755)
 %doc *.md
+%{_mandir}/man8/*minfs*.8*
 %attr(755,root,root) %{_sbindir}/minfs
 %attr(755,root,root) %{_sbindir}/mount.minfs

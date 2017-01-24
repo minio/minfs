@@ -1,0 +1,58 @@
+.\" MinFS - fuse driver for Object Storage (C) 2017 Minio, Inc.
+.\" This file is part of MinFS.
+.\"
+.\" Licensed under the Apache License, Version 2.0 (the "License");
+.\" you may not use this file except in compliance with the License.
+.\" You may obtain a copy of the License at
+.\"
+.\"    http://www.apache.org/licenses/LICENSE-2.0
+.\"
+.\" Unless required by applicable law or agreed to in writing, software
+.\" distributed under the License is distributed on an "AS IS" BASIS,
+.\" WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+.\" See the License for the specific language governing permissions and
+.\" limitations under the License.
+.\"
+
+.TH MinFS 8 "Fuse driver for Object Storage" "23 January 2017" "Minio, Inc."
+.SH NAME
+MinFS \- fuse driver for Object Storage
+.SH SYNOPSIS
+.B minfs
+.I [flags] command [arguments...]
+.PP
+.SH DESCRIPTION
+MinFS is a fuse driver for Amazon S3 compatible object storage server.
+Use it to store photos, videos, VMs, containers, log files, or any blob
+of data as objects on your object storage server.
+
+.SH OPTIONS
+
+.SS "Miscellaneous Options"
+.PP
+.TP
+
+\fB\-h, \fB\-\-help\fR
+Show help.
+.TP
+\fB\-V, \fB\-\-version\fR
+Print the minfs version.
+
+.PP
+.SH FILES
+/etc/minfs/config.json
+.SH EXAMPLES
+mount a bucket named foo at server play.minio.io:9000 on mount point /mnt/foo
+
+# minfs https://play.minio.io:9000/foo /mnt/foo
+
+.SH SEE ALSO
+.nf
+\fBfusermount\fR(1), \fBmount.minfs\fR(8)
+\fR
+.fi
+.SH COPYRIGHT
+.nf
+Copyright(c) 2017 Minio, Inc.  <https://www.minio.io>
+\fR
+.fi

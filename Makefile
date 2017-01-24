@@ -1,7 +1,7 @@
 LDFLAGS := $(shell go run buildscripts/gen-ldflags.go)
 DIRS := *.go fs/**.go cmd/**.go meta/**.go queue/**.go
 
-all: install
+all: gomake-all
 
 checks:
 	@echo "Checking deps:"
@@ -15,7 +15,7 @@ getdeps: checks
 	@go get github.com/client9/misspell/cmd/misspell && echo "Installed misspell:"
 
 # verifiers: getdeps vet fmt lint cyclo deadcode
-verifiers: vet lint cyclo deadcode spelling todo
+verifiers: vet lint cyclo deadcode spelling # todo
 
 todo:
 	@echo "Running $@:"
@@ -50,8 +50,6 @@ test: getdeps verifiers
 gomake-all: build
 	@echo "Installing minfs:"
 	@go build --ldflags "$(LDFLAGS)" github.com/minio/minfs
-	@/usr/bin/install -m 755 minfs /sbin/minfs
-	@/usr/bin/install -m 755 mount.minfs /sbin/mount.minfs
 
 coverage: getdeps verifiers
 	@echo "Running all coverage:"
@@ -75,6 +73,10 @@ pkg-list:
 	@$(GOPATH)/bin/govendor list
 
 install: gomake-all
+	@sudo /usr/bin/install -m 755 minfs /sbin/minfs && echo "Installing minfs"
+	@sudo /usr/bin/install -m 755 mount.minfs /sbin/mount.minfs && echo "Installing mount.minfs"
+	@sudo /usr/bin/install -m 644 doc/minfs.8 /usr/share/man/man8/minfs.8 && echo "Installing minfs.8"
+	@sudo /usr/bin/install -m 644 doc/mount.minfs.8 /usr/share/man/man8/mount.minfs.8 && echo "Installing mount.minfs.8"
 
 release: verifiers
 	@MINFS_RELEASE=RELEASE GO15VENDOREXPERIMENT=1 ./buildscripts/build.sh

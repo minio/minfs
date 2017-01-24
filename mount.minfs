@@ -55,7 +55,7 @@ main ()
     while getopts "Vh" opt; do
         case "${opt}" in
             V)
-                ${cmd_line} | grep -A1 VERSION;
+                ${cmd_line} -V;
                 exit 0;
                 ;;
             h)

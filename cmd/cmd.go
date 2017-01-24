@@ -33,6 +33,10 @@ var (
 			Name:  "help, h",
 			Usage: "Show help.",
 		},
+		cli.BoolFlag{
+			Name:  "version, V",
+			Usage: "Show version.",
+		},
 	}
 )
 
@@ -93,6 +97,7 @@ func Main() {
 	app := cli.NewApp()
 	app.Name = "minfs"
 	app.Author = "Minio.io"
+	app.Version = Version
 	app.Usage = "Fuse driver for Cloud Storage Server."
 	app.Description = `MinFS is a fuse driver for Amazon S3 compatible object storage server. Use it to store photos, videos, VMs, containers, log files, or any blob of data as objects on your object storage server.`
 	app.Flags = append(minfsFlags, globalFlags...)

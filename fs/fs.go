@@ -30,7 +30,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/minio/minfs/meta"
-	"github.com/minio/minfs/queue"
 	"github.com/minio/minio-go"
 
 	"bazil.org/fuse"
@@ -58,8 +57,6 @@ type MinFS struct {
 	locks map[string]bool
 
 	m sync.Mutex
-
-	queue *queue.Queue
 
 	syncChan chan interface{}
 }

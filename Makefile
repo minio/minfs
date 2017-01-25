@@ -1,5 +1,5 @@
 LDFLAGS := $(shell go run buildscripts/gen-ldflags.go)
-DIRS := *.go fs/**.go cmd/**.go meta/**.go queue/**.go
+DIRS := *.go fs/**.go cmd/**.go meta/**.go
 
 all: gomake-all
 

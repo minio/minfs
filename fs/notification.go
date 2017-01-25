@@ -168,11 +168,5 @@ func (mfs *MinFS) stopNotificationListener() error {
 	bn.RemoveTopicByArn(accountARN)
 
 	// Set back the new sets of notifications.
-	err = mfs.api.SetBucketNotification(mfs.config.bucket, bn)
-	if err != nil {
-		return err
-	}
-
-	// Success.
-	return nil
+	return mfs.api.SetBucketNotification(mfs.config.bucket, bn)
 }

@@ -260,8 +260,5 @@ func (f *File) Dirent() fuse.Dirent {
 func (f *File) delete(tx *meta.Tx) error {
 	// purge from cache
 	b := f.bucket(tx)
-	if err := b.Delete(f.Path); err != nil {
-		return err
-	}
-	return nil
+	return b.Delete(f.Path)
 }

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"path"
 	"sync"
 	"syscall"
@@ -59,6 +58,8 @@ type MinFS struct {
 	m sync.Mutex
 
 	syncChan chan interface{}
+
+	listenerDoneCh chan struct{}
 }
 
 // New will return a new MinFS client
@@ -97,10 +98,11 @@ func New(options ...func(*Config)) (*MinFS, error) {
 
 	// Initialize MinFS.
 	fs := &MinFS{
-		config:   cfg,
-		syncChan: make(chan interface{}),
-		locks:    map[string]bool{},
-		log:      log.New(logW, "MinFS ", log.Ldate|log.Ltime|log.Lshortfile),
+		config:         cfg,
+		syncChan:       make(chan interface{}),
+		locks:          map[string]bool{},
+		log:            log.New(logW, "MinFS ", log.Ldate|log.Ltime|log.Lshortfile),
+		listenerDoneCh: make(chan struct{}),
 	}
 
 	// Success..
@@ -164,11 +166,14 @@ func (mfs *MinFS) Serve() (err error) {
 			Message:    "The specified bucket does not exist",
 		}
 	}
-	// set notifications
-	// fmt.Println("Starting notification listener...")
-	// if err = mfs.startNotificationListener(); err != nil {
-	//	return err
-	// }
+
+	// Set notifications
+	/*
+		mfs.log.Println("Starting monitoring server...")
+		if err = mfs.startNotificationListener(); err != nil {
+			return err
+		}
+	*/
 
 	mfs.log.Println("Mounting target....")
 	// mount the drive
@@ -184,50 +189,35 @@ func (mfs *MinFS) Serve() (err error) {
 		return err
 	}
 
-	var wg sync.WaitGroup
-
 	// channel to receive errors
-	errorCh := make(chan error, 1)
+	trapCh := signalTrap(os.Interrupt, syscall.SIGTERM, os.Kill)
 
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
+		<-trapCh
 
-		mfs.log.Println("Mounted... Have fun!")
-		// Serve the filesystem
-		errorCh <- fs.Serve(c, mfs)
+		//mfs.stopNotificationListener()
+		mfs.shutdown()
 	}()
+
+	mfs.log.Println("Mounting... Have fun!")
+	// Serve the filesystem
+	if err = fs.Serve(c, mfs); err != nil {
+		mfs.log.Println("Error while serving the file system.", err)
+		return err
+	}
 
 	<-c.Ready
 	if err = c.MountError; err != nil {
 		return err
 	}
 
-	// todo(nl5887): move trap signals to Main, this is not supposed to be in Serve
-	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, os.Interrupt, os.Kill, syscall.SIGUSR1)
-
-loop:
-	for {
-		select {
-		case serr := <-errorCh:
-			return serr
-		case s := <-signalCh:
-			if s == os.Interrupt {
-				fuse.Unmount(mfs.config.mountpoint)
-				break loop
-			} else if s == syscall.SIGUSR1 {
-				// TODO - implement this.
-			}
-		}
-	}
-
-	wg.Wait()
-
-	// mfs.stopNotificationListener()
-	mfs.log.Println("MinFS stopped cleanly.")
-
+	mfs.shutdown()
 	return nil
+}
+
+func (mfs *MinFS) shutdown() {
+	fuse.Unmount(mfs.config.mountpoint)
+	mfs.log.Println("MinFS stopped cleanly.")
 }
 
 func (mfs *MinFS) sync(req interface{}) error {

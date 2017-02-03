@@ -16,55 +16,26 @@
 
 package minfs
 
-import minio "github.com/minio/minio-go"
+import (
+	"fmt"
+	"net/url"
+	"os"
+	"path"
+	"time"
+
+	"github.com/minio/minfs/meta"
+	minio "github.com/minio/minio-go"
+)
 
 func (mfs *MinFS) startNotificationListener() error {
-	return nil
-	/*
-		// try to set and listen for notifications
-		// Fetch the bucket location.
-		location, err := mfs.api.GetBucketLocation(mfs.config.bucket)
-		if err != nil {
-			return err
-		}
+	events := []string{string(minio.ObjectCreatedAll), string(minio.ObjectRemovedAll)}
 
-		// Fetch any existing bucket notification on the bucket.
-		bn, err := mfs.api.GetBucketNotification(mfs.config.bucket)
-		if err != nil {
-			return err
-		}
-
-		accountARN := minio.NewArn("minio", "sns", location, mfs.config.accountID, "listen")
-
-		// If there are no SNS topics configured, configure the first one.
-		shouldSetNotification := len(bn.TopicConfigs) == 0
-		if !shouldSetNotification {
-			// We found previously configure SNS topics, validate if current account-id is the same.
-			// this will always set shouldSetNotification right?
-			for _, topicConfig := range bn.TopicConfigs {
-				if topicConfig.Topic == accountARN.String() {
-					shouldSetNotification = false
-					break
-				}
-			}
-		}
-
-		if shouldSetNotification {
-			topicConfig := minio.NewNotificationConfig(accountARN)
-			topicConfig.AddEvents(minio.ObjectCreatedAll, minio.ObjectRemovedAll)
-			bn.AddTopic(topicConfig)
-
-			if err := mfs.api.SetBucketNotification(mfs.config.bucket, bn); err != nil {
-				return err
-			}
-		}
-
-		doneCh := make(chan struct{})
-
-		// todo(nl5887): reconnect on close
-		eventsCh := mfs.api.ListenBucketNotification(mfs.config.bucket, accountARN, doneCh)
-		go func() {
-			for notificationInfo := range eventsCh {
+	// Start listening on all bucket events.
+	eventsCh := mfs.api.ListenBucketNotification(mfs.config.bucket, "", "", events, mfs.listenerDoneCh)
+	go func() {
+		for {
+			select {
+			case notificationInfo := <-eventsCh:
 				if notificationInfo.Err != nil {
 					continue
 				}
@@ -76,9 +47,6 @@ func (mfs *MinFS) startNotificationListener() error {
 				}
 
 				defer tx.Rollback()
-				// todo(nl5887): defer not called in for each
-				// todo(nl5887): how to ignore my own created events?
-				// can we use eventsource?
 
 				for _, record := range notificationInfo.Records {
 					key, e := url.QueryUnescape(record.S3.Object.Key)
@@ -87,21 +55,41 @@ func (mfs *MinFS) startNotificationListener() error {
 						continue
 					}
 
-					fmt.Printf("%#v", record)
-
-					dir, _ := path.Split(key)
+					dir, file := path.Split(key)
 
 					b := tx.Bucket("minio/")
-
-					if v, err := b.CreateBucketIfNotExists(dir); err != nil {
-						fmt.Print("Error:", err)
-						continue
-					} else {
+					if dir != "" {
+						v, err := b.CreateBucketIfNotExists(dir)
+						if err != nil {
+							fmt.Print("Error:", err)
+							continue
+						}
 						b = v
 					}
 
+					var d *Dir
+					if dir == "" {
+						d = &Dir{
+							dir: nil,
+
+							mfs:  mfs,
+							Mode: os.ModeDir | 0555,
+							Path: "",
+						}
+					} else {
+						rootDir, _ := mfs.Root()
+						d = &Dir{
+							dir:  rootDir.(*Dir),
+							mfs:  mfs,
+							Mode: 0770 | os.ModeDir,
+							Path: dir,
+							GID:  mfs.config.gid,
+							UID:  mfs.config.uid,
+						}
+					}
+
 					var f interface{}
-					if err := b.Get(key, &f); err == nil {
+					if err := b.Get(file, &f); err == nil {
 					} else if !meta.IsNoSuchObject(err) {
 						fmt.Println("Error:", err)
 						continue
@@ -109,23 +97,22 @@ func (mfs *MinFS) startNotificationListener() error {
 						fmt.Println("Error:", err)
 						continue
 					} else {
-						oi := record.S3.Object
-						f = File{
-							Size:  uint64(oi.Size),
-							Inode: i,
-							UID:   mfs.config.uid,
-							GID:   mfs.config.gid,
-							Mode:  mfs.config.mode,
-							/*
-								objectMeta doesn't contain those fields
-
-								Chgtime: oi.LastModified,
-								Crtime:  oi.LastModified,
-								Mtime:   oi.LastModified,
-								Atime:   oi.LastModified,
-							*
-							Path: "/" + key,
-							ETag: oi.ETag,
+						objMeta := record.S3.Object
+						lastModified := time.Now().UTC()
+						f = &File{
+							dir:     d,
+							mfs:     mfs,
+							Size:    uint64(objMeta.Size),
+							Inode:   i,
+							UID:     mfs.config.uid,
+							GID:     mfs.config.gid,
+							Mode:    mfs.config.mode,
+							Path:    file,
+							Chgtime: lastModified,
+							Crtime:  lastModified,
+							Mtime:   lastModified,
+							Atime:   lastModified,
+							ETag:    objMeta.ETag,
 						}
 
 						if err := f.(*File).store(tx); err != nil {
@@ -140,33 +127,15 @@ func (mfs *MinFS) startNotificationListener() error {
 				if err := tx.Commit(); err != nil {
 					panic(err)
 				}
-
+			case <-mfs.listenerDoneCh:
+				return
 			}
-		}()
-
-		return nil
-	*/
+		}
+	}()
+	return nil
 }
 
 func (mfs *MinFS) stopNotificationListener() error {
-	// try to set and listen for notifications
-	// Fetch the bucket location.
-	location, err := mfs.api.GetBucketLocation(mfs.config.bucket)
-	if err != nil {
-		return err
-	}
-
-	// Fetch any existing bucket notification on the bucket.
-	bn, err := mfs.api.GetBucketNotification(mfs.config.bucket)
-	if err != nil {
-		return err
-	}
-
-	accountARN := minio.NewArn("minio", "sns", location, mfs.config.accountID, "listen")
-
-	// Remove account ARN if any.
-	bn.RemoveTopicByArn(accountARN)
-
-	// Set back the new sets of notifications.
-	return mfs.api.SetBucketNotification(mfs.config.bucket, bn)
+	close(mfs.listenerDoneCh)
+	return nil
 }

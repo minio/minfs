@@ -79,10 +79,10 @@ install: gomake-all
 	@sudo /usr/bin/install -m 644 doc/mount.minfs.8 /usr/share/man/man8/mount.minfs.8 && echo "Installing mount.minfs.8"
 
 release: verifiers
-	@MINFS_RELEASE=RELEASE GO15VENDOREXPERIMENT=1 ./buildscripts/build.sh
+	@MINFS_RELEASE=RELEASE ./buildscripts/build.sh
 
 experimental: verifiers
-	@MINFS_RELEASE=EXPERIMENTAL GO15VENDOREXPERIMENT=1 ./buildscripts/build.sh
+	@MINFS_RELEASE=EXPERIMENTAL ./buildscripts/build.sh
 
 clean:
 	@rm -f cover.out

@@ -2,20 +2,21 @@ package fuse
 
 import (
 	"bytes"
-	"errors"
+	"fmt"
 	"os/exec"
 )
 
 func unmount(dir string) error {
-	cmd := exec.Command("fusermount", "-u", dir)
-	output, err := cmd.CombinedOutput()
+	bin, err := fusermountBinary()
 	if err != nil {
-		if len(output) > 0 {
-			output = bytes.TrimRight(output, "\n")
-			msg := err.Error() + ": " + string(output)
-			err = errors.New(msg)
-		}
 		return err
 	}
-	return nil
+	errBuf := bytes.Buffer{}
+	cmd := exec.Command(bin, "-u", dir)
+	cmd.Stderr = &errBuf
+	err = cmd.Run()
+	if errBuf.Len() > 0 {
+		return fmt.Errorf("%s (code %v)", errBuf.String(), err)
+	}
+	return err
 }

@@ -107,13 +107,6 @@ func New(options ...func(*Config)) (*MinFS, error) {
 	return fs, nil
 }
 
-func (mfs *MinFS) updateMetadata() error {
-	for {
-		// Updates metadata periodically. This is being used when notification listener is not available
-		time.Sleep(time.Second * 2) // Every 2 secs.
-	}
-}
-
 func (mfs *MinFS) mount() (*fuse.Conn, error) {
 	return fuse.Mount(
 		mfs.config.mountpoint,
@@ -121,6 +114,8 @@ func (mfs *MinFS) mount() (*fuse.Conn, error) {
 		fuse.Subtype("MinFS"),
 		fuse.LocalVolume(),
 		fuse.VolumeName(mfs.config.bucket),
+		fuse.AllowOther(),
+		fuse.DefaultPermissions(),
 	)
 }
 

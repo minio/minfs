@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 	"sync"
 	"syscall"
@@ -55,6 +56,22 @@ func isBoringFusermountError(err error) bool {
 	return false
 }
 
+// lookPathFallback - search binary in PATH and, if that fails,
+// in fallbackDir. This is useful if PATH is possible empty.
+func lookPathFallback(file string, fallbackDir string) (string, error) {
+	binPath, err := exec.LookPath(file)
+	if err == nil {
+		return binPath, nil
+	}
+
+	abs := path.Join(fallbackDir, file)
+	return exec.LookPath(abs)
+}
+
+func fusermountBinary() (string, error) {
+	return lookPathFallback("fusermount", "/bin")
+}
+
 func mount(dir string, conf *mountConfig, ready chan<- struct{}, errp *error) (fusefd *os.File, err error) {
 	// linux mount is never delayed
 	close(ready)
@@ -70,8 +87,13 @@ func mount(dir string, conf *mountConfig, ready chan<- struct{}, errp *error) (f
 	readFile := os.NewFile(uintptr(fds[1]), "fusermount-parent-reads")
 	defer readFile.Close()
 
+	bin, err := fusermountBinary()
+	if err != nil {
+		return nil, err
+	}
+
 	cmd := exec.Command(
-		"fusermount",
+		bin,
 		"-o", conf.getOptions(),
 		"--",
 		dir,

@@ -29,6 +29,16 @@ type MoveOperation struct {
 	Target string
 }
 
+func newMoveOp(sourcePath, targetPath string) MoveOperation {
+	return MoveOperation{
+		Source: sourcePath,
+		Target: targetPath,
+		Operation: &Operation{
+			Error: make(chan error),
+		},
+	}
+}
+
 // CopyOperation - Copy source object to target.
 type CopyOperation struct {
 	*Operation
@@ -45,4 +55,15 @@ type PutOperation struct {
 
 	Source string
 	Target string
+}
+
+func newPutOp(sourcePath string, targetPath string, length int64) PutOperation {
+	return PutOperation{
+		Source: sourcePath,
+		Target: targetPath,
+		Length: int64(length),
+		Operation: &Operation{
+			Error: make(chan error),
+		},
+	}
 }

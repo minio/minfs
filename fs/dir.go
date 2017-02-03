@@ -91,8 +91,7 @@ func (dir *Dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
 		b := dir.bucket(tx)
 		return b.Get(name, &o)
 	}); err == nil {
-	} else if true /*meta.IsNoSuchObject(err) */ {
-		// todo(nl5887): nosuchobject returns incorrect error
+	} else if meta.IsNoSuchObject(err) {
 		return nil, fuse.ENOENT
 	} else if err != nil {
 		return nil, err
@@ -397,7 +396,7 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 	b := dir.bucket(tx)
 
 	var o interface{}
-	if err := b.Get(req.Name, &o); err != nil /*meta.IsNoSuchObject(err) */ {
+	if err := b.Get(req.Name, &o); meta.IsNoSuchObject(err) {
 		return fuse.ENOENT
 	} else if err != nil {
 		return err
@@ -512,10 +511,6 @@ func (dir *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.
 
 // Rename will rename files
 func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node) error {
-	// todo(nl5887): lock old file
-	// todo(nl5887): lock new file
-	// todo(nl5887): check (and update) locks
-
 	tx, err := dir.mfs.db.Begin(true)
 	if err != nil {
 		return err
@@ -543,18 +538,9 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 		file.dir = newDir
 		file.mfs = dir.mfs
 
-		// todo(nl5887): make function
-		sr := MoveOperation{
-			Source: oldPath,
-			Target: file.RemotePath(),
-			Operation: &Operation{
-				Error: make(chan error),
-			},
-		}
-
+		sr := newMoveOp(oldPath, file.RemotePath())
 		if err := dir.mfs.sync(&sr); err == nil {
-		} else if true /*meta.IsNoSuchObject(err) */ {
-			// todo(nl5887): nosuchobject returns incorrect error
+		} else if meta.IsNoSuchObject(err) {
 			return fuse.ENOENT
 		} else if err != nil {
 			return err
@@ -585,7 +571,7 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 
 		newDir.scanned = false
 
-		// todo(nl5887): fusebug?
+		// fusebug?
 		// the cached node is still invalid, contains the old name
 		// but there is no way to retrieve the old node to update the new
 		// name. refreshing the parent node won't fix the issue when
@@ -605,8 +591,6 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 		doneCh := make(chan struct{})
 		defer close(doneCh)
 
-		// todo(nl5887): should we queue operations, so it
-		// will live restart?
 		ch := dir.mfs.api.ListObjectsV2(dir.mfs.config.bucket, oldPath+"/", true, doneCh)
 	loop:
 		for {
@@ -620,18 +604,9 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 
 				newPath := path.Join(newDir.RemotePath(), req.NewName, message.Key[len(oldPath):])
 
-				// todo(nl5887): make function
-				sr := MoveOperation{
-					Source: message.Key,
-					Target: newPath,
-					Operation: &Operation{
-						Error: make(chan error),
-					},
-				}
-
+				sr := newMoveOp(message.Key, newPath)
 				if err := dir.mfs.sync(&sr); err == nil {
-				} else if true /*meta.IsNoSuchObject(err) */ {
-					// todo(nl5887): nosuchobject returns incorrect error
+				} else if meta.IsNoSuchObject(err) {
 					return fuse.ENOENT
 				} else if err != nil {
 					return err

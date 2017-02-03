@@ -98,18 +98,7 @@ func (fh *FileHandle) Flush(ctx context.Context, req *fuse.FlushRequest) error {
 		return nil
 	}
 
-	// todo(nl5887): create function
-	sr := PutOperation{
-		Source: fh.Name(),
-		Target: fh.f.RemotePath(),
-
-		Length: int64(fh.f.Size),
-
-		Operation: &Operation{
-			Error: make(chan error),
-		},
-	}
-
+	sr := newPutOp(fh.Name(), fh.f.RemotePath(), int64(fh.f.Size))
 	if err := fh.f.mfs.sync(&sr); err != nil {
 		return err
 	}

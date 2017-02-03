@@ -52,9 +52,6 @@ func (mfs *MinFS) IsLocked(path string) bool {
 
 // wait for the file lock to be unlocked
 func (mfs *MinFS) wait(path string) error {
-	// todo(nl5887): should we add mutex here? We cannot use mfs.m mutex,
-	// because that will create deadlock
-
 	// check if the file is locked, and wait for max 5 seconds for the file to be
 	// acquired
 	for i := 0; ; /* retries */ i++ {

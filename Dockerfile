@@ -7,7 +7,7 @@ COPY . /go/src/app
 RUN \
        apt-get update && \
        apt-get upgrade -y && \
-       apt-get install fuse -y && \
+       apt-get install fuse sudo -y && \
        go-wrapper download && \
        make install && \
        mkdir -p /minfs && \

@@ -129,6 +129,28 @@ func (mfs *MinFS) Serve() (err error) {
 		}
 	}
 
+	defer mfs.shutdown()
+
+	mfs.log.Println("Mounting target....")
+	// mount the drive
+	var c *fuse.Conn
+	c, err = mfs.mount()
+	if err != nil {
+		return err
+	}
+
+	defer c.Close()
+
+	// channel to receive errors
+	trapCh := signalTrap(os.Interrupt, syscall.SIGTERM, os.Kill)
+
+	go func() {
+		<-trapCh
+
+		//mfs.stopNotificationListener()
+		mfs.shutdown()
+	}()
+
 	// Initialize database.
 	mfs.log.Println("Opening cache database...")
 	mfs.db, err = meta.Open(path.Join(mfs.config.cache, "cache.db"), 0600, nil)
@@ -175,31 +197,11 @@ func (mfs *MinFS) Serve() (err error) {
 		}
 	*/
 
-	mfs.log.Println("Mounting target....")
-	// mount the drive
-	var c *fuse.Conn
-	c, err = mfs.mount()
-	if err != nil {
-		return err
-	}
-
-	defer c.Close()
-
 	if err = mfs.startSync(); err != nil {
 		return err
 	}
 
-	// channel to receive errors
-	trapCh := signalTrap(os.Interrupt, syscall.SIGTERM, os.Kill)
-
-	go func() {
-		<-trapCh
-
-		//mfs.stopNotificationListener()
-		mfs.shutdown()
-	}()
-
-	mfs.log.Println("Mounting... Have fun!")
+	mfs.log.Println("Serving... Have fun!")
 	// Serve the filesystem
 	if err = fs.Serve(c, mfs); err != nil {
 		mfs.log.Println("Error while serving the file system.", err)
@@ -211,7 +213,6 @@ func (mfs *MinFS) Serve() (err error) {
 		return err
 	}
 
-	mfs.shutdown()
 	return nil
 }
 

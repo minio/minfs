@@ -4,13 +4,55 @@ MinFS is a fuse driver for Amazon S3 compatible object storage server. Use it to
 
 [BoltDB](https://github.com/boltdb/bolt) is used for caching and saving metadata, list of files, permissions, owners etc. _NOTE_: Be careful it is always possible to remove boltdb cache. Cache will be recreated by MinFS synchronizing metadata from the server.
 
-## Docker Plugin
+## Minimum Requirements
+
+- Docker [1.13.x](http://docker.com/)
+
+## Installation
 
 ```sh
 docker plugin install minio/minfs
 ```
 
-### Create a docker volume using the plugin
+## Docker (Simple)
+
+In following `docker-compose` example volume is created and used by another `nginx` container to serve the static content from the bucket. 
+
+```yml
+version: '2'
+services:
+  my-test-server:
+    image: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - my-test-store:/usr/share/nginx/html:ro
+
+volumes:
+  my-test-store:
+    driver: minio/minfs
+    driver_opts:
+      endpoint: https://play.minio.io:9000
+      access-key: Q3AM3UQ867SPQQA43P2F
+      secret-key: zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG
+      bucket: testbucket
+```
+
+<blockquote>
+Please change the `endpoint`, `access-key`, `secret-key` and `bucket` for your local Minio setup.
+</blockquote>
+
+Once you have successfully created `docker-compose.yml` configuration in your current working directory.
+
+```sh
+docker-compose up
+```
+
+## Docker (Advanced)
+
+Using `docker` cli is a multi step process it is recommended that all users try `docker-compose` approach first to avoid any mistakes.
+
+Create a docker volume `my-test-store` using `minio/minfs` driver.
 
 ```sh
 docker volume create -d minio/minfs \
@@ -21,54 +63,48 @@ docker volume create -d minio/minfs \
   -o bucket=testbucket
 ```
 
-NOTE: Please change the `endpoint`, `access-key` and `secret-key` for your local Minio setup.
+<blockquote>
+Please change the `endpoint`, `access-key`, `secret-key` and `bucket` for your local Minio setup.
+</blockquote>
 
-### Attach the volume to a new container
-
-```sh
-docker run -it -v my-test-store:/data busybox /bin/sh
-ls /data
-```
-
-## Source
-
-Source installation is only intended for developers and advanced users. If you do not have a working Golang environment, please follow [How to install Golang](https://docs.minio.io/docs/how-to-install-golang).
+Once you have successfully created the volume, start a new container with `my-test-store` attached.
 
 ```sh
-go get -u -d github.com/minio/minfs
-cd $GOPATH/src/github.com/minio/minfs
-make
-make install
+docker run -d --name my-test-server -p 80:80 -v my-test-store:/usr/share/nginx/html:ro nginx
 ```
 
-### Add your credentials in `config.json`
+## Test `nginx` Service
 
-Before mounting you need to update access credentials in `config.json`. By default `config.json` is generated at `/etc/minfs`. `config.json` comes with default empty credentials which needs to be updated with your S3 server credentials. This is a one time activity and the same `config.json` can be copied on all the other **MinFS** deployments as well.
+Verify if your nginx container is running properly and serving content.
 
 ```sh
-mkdir -p /etc/minfs
-vi /etc/minfs/config.json
+curl localhost
 ```
 
-Default `config.json`.
+```html
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+  body {
+   width: 35em;
+   margin: 0 auto;
+   font-family: Tahoma, Verdana, Arial, sans-serif;
+  }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
 
-```json
-{"version":"1","accessKey":"","secretKey":""}
-```
+<p>For online documentation and support please refer to
+<a href="http://nginx.org/">nginx.org</a>.<br/>
+Commercial support is available at
+<a href="http://nginx.com/">nginx.com</a>.</p>
 
-`config.json` updated with your access credentials.
-
-```json
-{"version":"1","accessKey":"Q3AM3UQ867SPQQA43P2F","secretKey":"zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG"}
-```
-
-Once your have successfully updated `config.json`, we will proceed to mount.
-
-### Mount
-
-Before mounting you need to know the endpoint of your S3 server and also the `bucketName` that you are going to mount.
-
-```sh
-mkdir -p /testbucket
-mount -t minfs https://play.minio.io:9000/testbucket /testbucket
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
 ```

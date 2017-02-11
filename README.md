@@ -1,12 +1,18 @@
 # MinFS Quickstart Guide [![Slack](https://slack.minio.io/slack?type=svg)](https://slack.minio.io) [![Go Report Card](https://goreportcard.com/badge/minio/minfs)](https://goreportcard.com/report/minio/minfs) [![Docker Pulls](https://img.shields.io/docker/pulls/minio/minfs.svg?maxAge=604800)](https://hub.docker.com/r/minio/minfs/)
 
-MinFS is a fuse driver for Amazon S3 compatible object storage server. Use it to store photos, videos, VMs, containers, log files, or any blob of data as objects on your object storage server. This fuse driver is meant to be used for legacy applications with object storage.
+MinFS is a fuse driver for Amazon S3 compatible object storage server. MinFS lets you mount a remote bucket (from a S3 compatible object store), as if it were a local directory. This allows you to read and write from the remote bucket just by operating on the local mount directory.
 
-[BoltDB](https://github.com/boltdb/bolt) is used for caching and saving metadata, list of files, permissions, owners etc. _NOTE_: Be careful it is always possible to remove boltdb cache. Cache will be recreated by MinFS synchronizing metadata from the server.
+MinFS helps legacy applications use modern object stores with minimal config changes. MinFS uses [BoltDB](https://github.com/boltdb/bolt) for caching and saving metadata, list of files, permissions, owners etc.
+
+_NOTE_: Be careful, it is always possible to remove boltdb cache. Cache will be recreated by MinFS synchronizing metadata from the server.
+
+## MinFS Docker Volume plugin
+
+MinFS can also be used via the [MinFS Docker volume plugin](https://github.com/minio/minfs-docker-plugin). You can mount a local folder onto a Docker container, without having to go through the dependency installation or the mount and unmount operations of MinFS. 
 
 ## Minimum Requirements
 
-- Docker [1.13.x](http://docker.com/)
+- [Docker Engine](http://docker.com/) v1.13.0 and above.
 
 ## Installation
 
@@ -75,7 +81,7 @@ docker run -d --name my-test-server -p 80:80 -v my-test-store:/usr/share/nginx/h
 
 ## Test `nginx` Service
 
-Verify if your nginx container is running properly and serving content.
+Either of the above steps create a MinFS based volume for a Nginx container. Verify if your nginx container is running properly and serving content.
 
 ```sh
 curl localhost

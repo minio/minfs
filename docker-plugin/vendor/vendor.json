@@ -1,0 +1,79 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "L9njXCkN30+qHaLayiiA2Q9jDlY=",
+			"path": "github.com/Microsoft/go-winio",
+			"revision": "307e919c663683a9000576fdc855acaf9534c165",
+			"revisionTime": "2017-01-13T00:12:40Z"
+		},
+		{
+			"checksumSHA1": "2avCvSn0XonfApKKuTMyiQmk7s0=",
+			"path": "github.com/Sirupsen/logrus",
+			"revision": "3ec0642a7fb6488f65b06f9040adc67e3990296a",
+			"revisionTime": "2016-08-29T20:23:21Z"
+		},
+		{
+			"checksumSHA1": "7tvyONViTN7mFX376eSfjvzcSGI=",
+			"path": "github.com/docker/go-connections/sockets",
+			"revision": "eb315e36415380e7c2fdee175262560ff42359da",
+			"revisionTime": "2017-01-01T21:01:28Z"
+		},
+		{
+			"checksumSHA1": "G7NHweddpD10GEcpqmdB/Bq6FZI=",
+			"path": "github.com/docker/go-plugins-helpers/sdk",
+			"revision": "261c0c7fc902aeb7ad448df38e6ee370a3e0e597",
+			"revisionTime": "2017-01-14T20:54:50Z"
+		},
+		{
+			"checksumSHA1": "bELvyBvmY5t2P/dCuCLxwTb1I+Q=",
+			"path": "github.com/docker/go-plugins-helpers/volume",
+			"revision": "261c0c7fc902aeb7ad448df38e6ee370a3e0e597",
+			"revisionTime": "2017-01-14T20:54:50Z"
+		},
+		{
+			"checksumSHA1": "P45vuk7tIHWXM49IcPHB5TDDYj8=",
+			"path": "github.com/minio/minio-go",
+			"revision": "83ba3bc20623438aa0e7157c4efee4091dfe5703",
+			"revisionTime": "2017-01-21T02:01:47Z"
+		},
+		{
+			"checksumSHA1": "neH34/65OXeKHM/MlV8MbhcdFBc=",
+			"path": "github.com/minio/minio-go/pkg/policy",
+			"revision": "83ba3bc20623438aa0e7157c4efee4091dfe5703",
+			"revisionTime": "2017-01-21T02:01:47Z"
+		},
+		{
+			"checksumSHA1": "m/6/na9lVtamkfmIdIOi5pdccgw=",
+			"path": "github.com/minio/minio-go/pkg/s3signer",
+			"revision": "83ba3bc20623438aa0e7157c4efee4091dfe5703",
+			"revisionTime": "2017-01-21T02:01:47Z"
+		},
+		{
+			"checksumSHA1": "gRnCFKb4x83GBLVUZXoOjujd+U0=",
+			"path": "github.com/minio/minio-go/pkg/s3utils",
+			"revision": "83ba3bc20623438aa0e7157c4efee4091dfe5703",
+			"revisionTime": "2017-01-21T02:01:47Z"
+		},
+		{
+			"checksumSHA1": "maUy+dbN6VfTTnfErrAW2lLit1w=",
+			"path": "github.com/minio/minio-go/pkg/set",
+			"revision": "83ba3bc20623438aa0e7157c4efee4091dfe5703",
+			"revisionTime": "2017-01-21T02:01:47Z"
+		},
+		{
+			"checksumSHA1": "LvdVRE0FqdR68SvVpRkHs1rxhcA=",
+			"path": "golang.org/x/net/proxy",
+			"revision": "f2499483f923065a842d38eb4c7f1927e6fc6e6d",
+			"revisionTime": "2017-01-14T04:22:49Z"
+		},
+		{
+			"checksumSHA1": "kQB2wRB3twjUp615F6zEwGHjNe0=",
+			"path": "golang.org/x/sys/windows",
+			"revision": "d75a52659825e75fff6158388dddc6a5b04f9ba5",
+			"revisionTime": "2016-12-14T18:38:57Z"
+		}
+	],
+	"rootPath": "github.com/minio/minfs-docker-plugin"
+}

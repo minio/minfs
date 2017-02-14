@@ -75,8 +75,8 @@ pkg-list:
 install: gomake-all
 	@sudo /usr/bin/install -m 755 minfs /sbin/minfs && echo "Installing minfs"
 	@sudo /usr/bin/install -m 755 mount.minfs /sbin/mount.minfs && echo "Installing mount.minfs"
-	@sudo /usr/bin/install -m 644 doc/minfs.8 /usr/share/man/man8/minfs.8 && echo "Installing minfs.8"
-	@sudo /usr/bin/install -m 644 doc/mount.minfs.8 /usr/share/man/man8/mount.minfs.8 && echo "Installing mount.minfs.8"
+	@sudo /usr/bin/install -m 644 docs/minfs.8 /usr/share/man/man8/minfs.8 && echo "Installing minfs.8"
+	@sudo /usr/bin/install -m 644 docs/mount.minfs.8 /usr/share/man/man8/mount.minfs.8 && echo "Installing mount.minfs.8"
 
 release: verifiers
 	@MINFS_RELEASE=RELEASE ./buildscripts/build.sh

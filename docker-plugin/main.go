@@ -58,6 +58,8 @@ type serverConfig struct {
 	accessKey string
 	// secretKey of the remote Minio server.
 	secretKey string
+	// Additional opts like custom uid,gid etc.
+	opts string
 }
 
 // Represents an instance of `minfs` mount of remote Minio bucket.
@@ -181,6 +183,7 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 	config.bucket = r.Options["bucket"]
 	config.secretKey = r.Options["secret-key"]
 	config.accessKey = r.Options["access-key"]
+	config.opts = r.Options["opts"]
 
 	// find out whether the scheme of the URL is HTTPS.
 	enableSSL, err := isSSL(config.endpoint)
@@ -213,6 +216,7 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 			logrus.WithFields(logrus.Fields{
 				"endpoint": config.endpoint,
 				"bucket":   config.bucket,
+				"opts":     config.opts,
 			}).Fatal(err.Error())
 			return errorResponse(err.Error())
 		}
@@ -220,6 +224,7 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 		logrus.WithFields(logrus.Fields{
 			"endpoint": config.endpoint,
 			"bucket":   config.bucket,
+			"opts":     config.opts,
 		}).Info("Bucket already exisits.")
 	}
 
@@ -368,6 +373,7 @@ func (d *minfsDriver) Mount(r volume.MountRequest) volume.Response {
 			"mountpount": v.mountPoint,
 			"endpoint":   v.config.endpoint,
 			"bucket":     v.config.bucket,
+			"opts":       v.config.opts,
 		}).Fatalf("Mount failed: <ERROR> %v", err)
 
 		return errorResponse(err.Error())
@@ -472,9 +478,12 @@ func (d *minfsDriver) mountVolume(v mountInfo) error {
 		bucketPath = v.config.endpoint + "/" + v.config.bucket
 	}
 
-	// mount command for minfs.
-	// ex:  mount -t minfs https://play.minio.io:9000/testbucket /testbucket
 	cmd := fmt.Sprintf("mount -t minfs %s %s", bucketPath, v.mountPoint)
+	if v.config.opts != "" {
+		// mount command for minfs.
+		// ex:  mount -t minfs https://play.minio.io:9000/testbucket /testbucket
+		cmd = fmt.Sprintf("mount -t minfs -o %s %s %s", v.config.opts, bucketPath, v.mountPoint)
+	}
 
 	logrus.Debug(cmd)
 	return exec.Command("sh", "-c", cmd).Run()

@@ -32,6 +32,7 @@ volumes:
       access-key: Q3AM3UQ867SPQQA43P2F
       secret-key: zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG
       bucket: testbucket
+      # opts: "uid=1000,gid=1000" for custom user/group id
 ```
 
 <blockquote>

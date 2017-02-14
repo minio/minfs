@@ -63,26 +63,27 @@ func getScheme(endpoint string) (string, error) {
 // Since a mount is uniquely identified by its volume name its not possible to have a duplicate entry.
 func matchServerConfig(config serverConfig, r volume.Request) error {
 	if r.Options == nil {
-		return fmt.Errorf("No options provided. Please refer example usage.")
+		return fmt.Errorf("No options provided. Please refer example usage")
 	}
 	// Compare the endpoints.
 	if r.Options["endpoint"] == config.endpoint {
-		return fmt.Errorf("Volume \"%s\" already exists and is pointing to Minio server\"%s\",Cannot create duplicate volume.",
-			r.Name, config.endpoint)
+		return fmt.Errorf("Volume \"%s\" already exists, Cannot create duplicate volume", r.Name)
 	}
 	// Compare the bucket name.
 	if r.Options["bucket"] == config.bucket {
-		return fmt.Errorf("Volume \"%s\" already exists and is pointing to Minio server \"%s\", and bucket \"%s\",Cannot create duplicate volume.",
-			r.Name, config.endpoint)
+		return fmt.Errorf("Volume \"%s\" already exists, Cannot create duplicate volume", r.Name)
+	}
+	if r.Options["opts"] == config.opts {
+		return fmt.Errorf("Volume \"%s\" already exists, Cannot create duplicate volume", r.Name)
 	}
 	// compare the access keys.
 	if r.Options["access-key"] == "" {
-		return fmt.Errorf("Volume \"%s\" already exists, access key mismatch.", r.Name)
+		return fmt.Errorf("Volume \"%s\" already exists, access key mismatch", r.Name)
 
 	}
 	// compare the secret keys.
 	if r.Options["secret-key"] == "" {
-		return fmt.Errorf("Volume \"%s\" already exists, secret key mismatch.", r.Name)
+		return fmt.Errorf("Volume \"%s\" already exists, secret key mismatch", r.Name)
 	}
 	// match successful, return `nil` error.
 	return nil
@@ -96,19 +97,5 @@ func errorResponse(err string) volume.Response {
 
 // create directory for the given path.
 func createDir(path string) error {
-	// verify whether the directory already exists.
-	fi, err := os.Lstat(path)
-	// create the directory doesn't exist.
-	if os.IsNotExist(err) {
-		if err := os.MkdirAll(path, 0755); err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	}
-	// if the file already exists, very that it is a directory.
-	if fi != nil && !fi.IsDir() {
-		return fmt.Errorf("%v already exist and it's not a directory", path)
-	}
-	return nil
+	return os.MkdirAll(path, 0755)
 }

@@ -23,11 +23,10 @@ FUSE options
 
 ### Options
 
-* **GID**: The default gid to assign for files from storage.
-* **UID**: The default gid to assign for files from storage.
-* **Cache**: Location for cache folder.
-* **Path**: The root path in the bucket
-* **Debug**: Enables debug logs
+* **gid**: The default gid to assign for files from storage.
+* **uid**: The default gid to assign for files from storage.
+* **cache**: Location for cache folder.
+* **debug**: Enables debug logs
 
 ### Work in Progress.
 

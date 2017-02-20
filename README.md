@@ -14,15 +14,9 @@ MinFS can also be used via the [MinFS Docker volume plugin](https://github.com/m
 
 - [Docker Engine](http://docker.com/) v1.13.0 and above.
 
-## Installation
+## Using Docker Compose 
 
-```sh
-docker plugin install minio/minfs
-```
-
-## Docker (Simple)
-
-In following `docker-compose` example volume is created and used by another `nginx` container to serve the static content from the bucket. 
+Use `docker-compose` to create a volume using the plugin and share the volume with other containers. In the example below the volume is created using the minfs plugin and and used by `nginx` container to serve the static content from the bucket. 
 
 ```yml
 version: '2'
@@ -54,9 +48,14 @@ Once you have successfully created `docker-compose.yml` configuration in your cu
 docker-compose up
 ```
 
-## Docker (Advanced)
+## Using Docker
+One can even manually install the plugin, create and the volume using docker.
 
-Using `docker` cli is a multi step process it is recommended that all users try `docker-compose` approach first to avoid any mistakes.
+Install the plugin
+
+```sh
+docker plugin install minio/minfs
+```
 
 Create a docker volume `my-test-store` using `minio/minfs` driver.
 
@@ -74,10 +73,13 @@ Please change the `endpoint`, `access-key`, `secret-key` and `bucket` for your l
 </blockquote>
 
 Once you have successfully created the volume, start a new container with `my-test-store` attached.
+In the example below `nginx` container is run to serve pages from the new volume.
 
 ```sh
 docker run -d --name my-test-server -p 80:80 -v my-test-store:/usr/share/nginx/html:ro nginx
 ```
+
+
 
 ## Test `nginx` Service
 

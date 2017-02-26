@@ -4,19 +4,64 @@ MinFS is a fuse driver for Amazon S3 compatible object storage server. MinFS let
 
 MinFS helps legacy applications use modern object stores with minimal config changes. MinFS uses [BoltDB](https://github.com/boltdb/bolt) for caching and saving metadata, list of files, permissions, owners etc.
 
-_NOTE_: Be careful, it is always possible to remove boltdb cache. Cache will be recreated by MinFS synchronizing metadata from the server.
+> Be careful, it is always possible to remove boltdb cache. Cache will be recreated by MinFS synchronizing metadata from the server.
+
+## MinFS RPMs
+
+### Minimum Requirements
+
+- [RPM Package Manager](http://rpm.org/)
+
+### Install
+
+Download the pre-built RPMs from [here](https://github.com/minio/minfs/releases/tag/RELEASE.2017-02-26T20-20-56Z)
+
+```sh
+yum install minfs-0.0.20170226202056-1.x86_64.rpm
+```
+
+### Update `config.json`
+
+Create a new `config.json` in /etc/minfs directory with your S3 server access and secret keys.
+
+> This example uses [play.minio.io:9000](https://play.minio.io:9000)
+
+```json
+{"version":"1","accessKey":"Q3AM3UQ867SPQQA43P2F","secretKey":"zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG"}
+```
+
+### Mount `mybucket`
+
+Create an `/etc/fstab` entry
+
+```
+https://play.minio.io:9000/mybucket /mnt/mounted/mybucket minfs defaults,cache=/tmp/mybucket 0 0
+```
+
+Now proceed to mount `fstab` entry.
+
+```sh
+mount /mnt/mounted/mybucket
+```
+
+Verify if `mybucket` is mounted and is accessible.
+
+```
+ls -F /mnt/mounted/mybucket
+etc/  issue
+```
 
 ## MinFS Docker Volume plugin
 
-MinFS can also be used via the [MinFS Docker volume plugin](https://github.com/minio/minfs-docker-plugin). You can mount a local folder onto a Docker container, without having to go through the dependency installation or the mount and unmount operations of MinFS. 
+MinFS can also be used via the [MinFS Docker volume plugin](https://github.com/minio/minfs-docker-plugin). You can mount a local folder onto a Docker container, without having to go through the dependency installation or the mount and unmount operations of MinFS.
 
-## Minimum Requirements
+### Minimum Requirements
 
 - [Docker Engine](http://docker.com/) v1.13.0 and above.
 
-## Using Docker Compose 
+### Using Docker Compose
 
-Use `docker-compose` to create a volume using the plugin and share the volume with other containers. In the example below the volume is created using the minfs plugin and and used by `nginx` container to serve the static content from the bucket. 
+Use `docker-compose` to create a volume using the plugin and share the volume with other containers. In the example below the volume is created using the minfs plugin and and used by `nginx` container to serve the static content from the bucket.
 
 ```yml
 version: '2'
@@ -48,7 +93,7 @@ Once you have successfully created `docker-compose.yml` configuration in your cu
 docker-compose up
 ```
 
-## Using Docker
+### Using Docker
 One can even manually install the plugin, create and the volume using docker.
 
 Install the plugin
@@ -79,9 +124,7 @@ In the example below `nginx` container is run to serve pages from the new volume
 docker run -d --name my-test-server -p 80:80 -v my-test-store:/usr/share/nginx/html:ro nginx
 ```
 
-
-
-## Test `nginx` Service
+### Test `nginx` Service
 
 Either of the above steps create a MinFS based volume for a Nginx container. Verify if your nginx container is running properly and serving content.
 

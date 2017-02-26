@@ -1,22 +1,24 @@
-%define		tag     RELEASE.2017-01-25T00-11-54Z
+%define		tag     RELEASE.2017-02-26T20-20-56Z
 %define		subver	%(echo %{tag} | sed -e 's/[^0-9]//g')
-# git fetch https://github.com/minio/minfs.git refs/tags/RELEASE.2017-01-25T00-11-54Z
+# git fetch https://github.com/minio/minfs.git refs/tags/RELEASE.2017-02-26T20-20-56Z
 # git rev-list -n 1 FETCH_HEAD
-%define         commitid 85438efb8ee4bb01251f6e999b6c6599c2b67665
+%define         commitid ab47fd9801140eea4444cdf28fbe68f7e4a33ceb
 
 ##-----------------------------------------------------------------------------
 ## All package definitions should be placed here in alphabetical order
 ##
-Summary:          MinFS is a fuse driver.
+Summary:          MinFS is a fuse driver for S3 compatible object storage.
 Name:             minfs
 Version:          0.0.%{subver}
 Release:          1
 Vendor:           Minio, Inc.
-Group:		  Development/Building
+Group:            Applications/File
 License:          Apache v2.0
 Source0:	  https://github.com/minio/minfs/archive/%{tag}.tar.gz
 BuildRoot:	  %{tmpdir}/%{name}-%{version}-root-%(id -u -n)
-
+Requires:         fuse
+BuildRequires:    fuse-devel
+BuildRequires:    golang >= 1.7.4
 
 ## Disable debug packages.
 %define         debug_package %{nil}
@@ -28,8 +30,9 @@ BuildRoot:	  %{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %description
 MinFS is a fuse driver for Amazon S3 compatible object storage server.
-Use it to store photos, videos, VMs, containers, log files, or any
-blob of data as objects on your object storage server.
+MinFS lets you mount a remote bucket (from a S3 compatible object store),
+as if it were a local directory. This allows you to read and write from
+the remote bucket just by operating on the local mount directory.
 
 %prep
 %setup -qc
@@ -64,8 +67,9 @@ install -d $RPM_BUILD_ROOT%{_sysconfdir}/minfs
 install -d $RPM_BUILD_ROOT%{_sysconfdir}/minfs/db
 install -p %{name} $RPM_BUILD_ROOT%{_sbindir}
 install -p mount.minfs $RPM_BUILD_ROOT%{_sbindir}
-install -m 644 minfs.8 $RPM_BUILD_ROOT%{_mandir}/man8
-install -m 644 mount.minfs.8 $RPM_BUILD_ROOT%{_mandir}/man8
+install -d $RPM_BUILD_ROOT%{_mandir}/man8
+install -m 644 docs/minfs.8 $RPM_BUILD_ROOT%{_mandir}/man8
+install -m 644 docs/mount.minfs.8 $RPM_BUILD_ROOT%{_mandir}/man8
 
 %clean
 rm -rf $RPM_BUILD_ROOT

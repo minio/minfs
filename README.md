@@ -53,7 +53,7 @@ etc/  issue
 
 ## MinFS Docker Volume plugin
 
-MinFS can also be used via the [MinFS Docker volume plugin](https://github.com/minio/minfs-docker-plugin). You can mount a local folder onto a Docker container, without having to go through the dependency installation or the mount and unmount operations of MinFS.
+MinFS can also be used via the [MinFS Docker volume plugin](https://github.com/minio/minfs/tree/master/docker-plugin). You can mount a local folder onto a Docker container, without having to go through the dependency installation or the mount and unmount operations of MinFS.
 
 ### Minimum Requirements
 

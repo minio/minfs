@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/Sirupsen/logrus"
@@ -58,6 +58,8 @@ type serverConfig struct {
 	accessKey string
 	// secretKey of the remote Minio server.
 	secretKey string
+	// path to minfs cache directory.
+	cacheDir string
 	// Additional opts like custom uid,gid etc.
 	opts string
 }
@@ -137,7 +139,7 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 	// validate the inputs.
 	// verify that the name of the volume is not empty.
 	if r.Name == "" {
-		return errorResponse("Name of the driver cannot be empty.Use `$ docker volume create -d <plugin-name> --name <volume-name>`")
+		return errorResponse("Volume name can't be empty. Use `$ docker volume create -d <plugin-name> --name <volume-name>`")
 	}
 
 	// if the volume is already created verify that the server configs match.
@@ -175,15 +177,14 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 		return errorResponse("secret-key cannot be empty.")
 	}
 
-	mntInfo := &mountInfo{}
-	config := serverConfig{}
-
 	// Additional options passed with `-o` option are parsed here.
-	config.endpoint = r.Options["endpoint"]
-	config.bucket = r.Options["bucket"]
-	config.secretKey = r.Options["secret-key"]
-	config.accessKey = r.Options["access-key"]
-	config.opts = r.Options["opts"]
+	config := serverConfig{
+		endpoint:  r.Options["endpoint"],
+		bucket:    r.Options["bucket"],
+		secretKey: r.Options["secret-key"],
+		accessKey: r.Options["access-key"],
+		cacheDir:  r.Options["cache"],
+	}
 
 	// find out whether the scheme of the URL is HTTPS.
 	enableSSL, err := isSSL(config.endpoint)
@@ -225,7 +226,7 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 			"endpoint": config.endpoint,
 			"bucket":   config.bucket,
 			"opts":     config.opts,
-		}).Info("Bucket already exisits.")
+		}).Info("Bucket already exists.")
 	}
 
 	// mountpoint is the local path where the remote bucket is mounted.
@@ -234,21 +235,20 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 	// the volume passed by docker when a volume is created).
 	mountpoint := filepath.Join(d.mountRoot, r.Name)
 
-	// Cache the info.
-	mntInfo.mountPoint = mountpoint
-
 	// `Create` is the only function which has the abiility to pass additional options.
 	// Protocol doc: https://docs.docker.com/engine/extend/plugins_volume/#/volumedrivercreate
 	// the server config info which is required for the mount later is also passed as an option during create.
 	// This has to be cached for further usage.
-	mntInfo.config = config
+	mntInfo := &mountInfo{
+		mountPoint: mountpoint,
+		config:     config,
+	}
 
 	// `r.Name` contains the plugin name passed with `--name` in
 	// `$ docker volume create -d <plugin-name> --name <volume-name>`.
 	// Name of the volume uniquely identifies the mount.
 	d.mounts[r.Name] = mntInfo
 
-	// ..
 	return volume.Response{}
 }
 
@@ -353,7 +353,7 @@ func (d *minfsDriver) Mount(r volume.MountRequest) volume.Response {
 	err := createDir(v.mountPoint)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
-			"mountpount": v.mountPoint,
+			"mountpoint": v.mountPoint,
 		}).Fatalf("Error creating directory for the mountpoint. <ERROR> %v.", err)
 		return errorResponse(err.Error())
 	}
@@ -370,7 +370,7 @@ func (d *minfsDriver) Mount(r volume.MountRequest) volume.Response {
 
 	if err := d.mountVolume(*v); err != nil {
 		logrus.WithFields(logrus.Fields{
-			"mountpount": v.mountPoint,
+			"mountpoint": v.mountPoint,
 			"endpoint":   v.config.endpoint,
 			"bucket":     v.config.bucket,
 			"opts":       v.config.opts,
@@ -471,19 +471,10 @@ func (d *minfsDriver) Capabilities(r volume.Request) volume.Response {
 func (d *minfsDriver) mountVolume(v mountInfo) error {
 
 	// URL for the bucket (ex: https://play.minio.io:9000/mybucket).
-	var bucketPath string
-	if strings.HasSuffix(v.config.endpoint, "/") {
-		bucketPath = v.config.endpoint + v.config.bucket
-	} else {
-		bucketPath = v.config.endpoint + "/" + v.config.bucket
-	}
+	bucketPath := path.Join(v.config.endpoint, v.config.bucket)
 
-	cmd := fmt.Sprintf("mount -t minfs %s %s", bucketPath, v.mountPoint)
-	if v.config.opts != "" {
-		// mount command for minfs.
-		// ex:  mount -t minfs https://play.minio.io:9000/testbucket /testbucket
-		cmd = fmt.Sprintf("mount -t minfs -o %s %s %s", v.config.opts, bucketPath, v.mountPoint)
-	}
+	// ex: mount -t minfs -o cache=/path/to/cache-dir https://play.minio.io:9000/testbucket /testbucket
+	cmd := fmt.Sprintf("mount -t minfs -o cache=%s %s %s", v.config.cacheDir, bucketPath, v.mountPoint)
 
 	logrus.Debug(cmd)
 	return exec.Command("sh", "-c", cmd).Run()

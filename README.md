@@ -81,6 +81,7 @@ volumes:
       access-key: Q3AM3UQ867SPQQA43P2F
       secret-key: zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG
       bucket: testbucket
+      opts: cache=/tmp/my-test-store
 ```
 
 <blockquote>
@@ -111,10 +112,11 @@ docker volume create -d minio/minfs \
   -o access-key=Q3AM3UQ867SPQQA43P2F \
   -o secret-key=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG \
   -o bucket=testbucket
+  -o opts=cache=/tmp/my-test-store
 ```
 
 <blockquote>
-Please change the `endpoint`, `access-key`, `secret-key` and `bucket` for your local Minio setup.
+Please change the `endpoint`, `access-key`, `secret-key`, `bucket` and `opts` for your local Minio setup.
 </blockquote>
 
 Once you have successfully created the volume, start a new container with `my-test-store` attached.

@@ -334,12 +334,12 @@ func (mfs *MinFS) NextSequence(tx *meta.Tx) (sequence uint64, err error) {
 // Root is the root folder of the MinFS mountpoint
 func (mfs *MinFS) Root() (fs.Node, error) {
 	return &Dir{
-		dir: nil,
+		dir:  nil,
 		mfs:  mfs,
 		Path: "",
 
-                UID: mfs.config.uid,
-                GID: mfs.config.gid,
+		UID:  mfs.config.uid,
+		GID:  mfs.config.gid,
 		Mode: os.ModeDir | 0750,
 	}, nil
 }

@@ -335,10 +335,12 @@ func (mfs *MinFS) NextSequence(tx *meta.Tx) (sequence uint64, err error) {
 func (mfs *MinFS) Root() (fs.Node, error) {
 	return &Dir{
 		dir: nil,
-
 		mfs:  mfs,
-		Mode: os.ModeDir | 0555,
 		Path: "",
+
+                UID: mfs.config.uid,
+                GID: mfs.config.gid,
+		Mode: os.ModeDir | 0750,
 	}, nil
 }
 

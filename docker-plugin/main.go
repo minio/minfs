@@ -225,7 +225,7 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 			"endpoint": config.endpoint,
 			"bucket":   config.bucket,
 			"opts":     config.opts,
-		}).Info("Bucket already exisits.")
+		}).Info("Bucket already exists.")
 	}
 
 	// mountpoint is the local path where the remote bucket is mounted.
@@ -500,7 +500,7 @@ func (d *minfsDriver) unmountVolume(target string) error {
 func main() {
 	// --mountroot flag defines the root folder where are the volumes are mounted.
 	// If the option is not specified '/mnt' is taken as default mount root.
-	mountRoot := flag.String("mountroot", "/mnt", "root for mouting Minio buckets.")
+	mountRoot := flag.String("mountroot", "/mnt", "root for mounting Minio buckets.")
 	flag.Parse()
 
 	// check if the mount root exists.

@@ -1,7 +1,7 @@
 Introduction [![Slack](https://slack.minio.io/slack?type=svg)](https://slack.minio.io)
 ------------
 
-This fuse driver allows Minio bucket or any bucket on S3 compatible storage to be mounted as a local, as a prerequesite you need [fusermount](http://man7.org/linux/man-pages/man1/fusermount.1.html). This feature allows Minio to serve a bucket over a minimal POSIX API.
+This fuse driver allows Minio bucket or any bucket on S3 compatible storage to be mounted as a local, as a prerequesite you need [fusermount](http://man7.org/linux/man-pages/man1/fusermount3.1.html). This feature allows Minio to serve a bucket over a minimal POSIX API.
 
 Limitations
 ----------

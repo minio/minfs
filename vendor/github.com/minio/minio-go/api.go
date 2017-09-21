@@ -1,5 +1,6 @@
 /*
- * Minio Go Library for Amazon S3 Compatible Cloud Storage (C) 2015, 2016 Minio, Inc.
+ * Minio Go Library for Amazon S3 Compatible Cloud Storage
+ * (C) 2015, 2016, 2017 Minio, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,22 +19,28 @@ package minio
 
 import (
 	"bytes"
+	"context"
+	"crypto/md5"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"regexp"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/minio/minio-go/pkg/credentials"
 	"github.com/minio/minio-go/pkg/s3signer"
 	"github.com/minio/minio-go/pkg/s3utils"
 )
@@ -45,14 +52,11 @@ type Client struct {
 	// Parsed endpoint url provided by the user.
 	endpointURL url.URL
 
-	// AccessKeyID required for authorized requests.
-	accessKeyID string
-	// SecretAccessKey required for authorized requests.
-	secretAccessKey string
-	// Choose a signature type if necessary.
-	signature SignatureType
-	// Set to 'true' if Client has no access and secret keys.
-	anonymous bool
+	// Holds various credential providers.
+	credsProvider *credentials.Credentials
+
+	// Custom signerType value overrides all credentials.
+	overrideSignerType credentials.SignatureType
 
 	// User supplied.
 	appInfo struct {
@@ -74,6 +78,9 @@ type Client struct {
 	// S3 specific accelerated endpoint.
 	s3AccelerateEndpoint string
 
+	// Region endpoint
+	region string
+
 	// Random seed.
 	random *rand.Rand
 }
@@ -81,7 +88,7 @@ type Client struct {
 // Global constants.
 const (
 	libraryName    = "minio-go"
-	libraryVersion = "2.0.3"
+	libraryVersion = "4.0.0"
 )
 
 // User Agent should always following the below style.
@@ -96,43 +103,58 @@ const (
 // NewV2 - instantiate minio client with Amazon S3 signature version
 // '2' compatibility.
 func NewV2(endpoint string, accessKeyID, secretAccessKey string, secure bool) (*Client, error) {
-	clnt, err := privateNew(endpoint, accessKeyID, secretAccessKey, secure)
+	creds := credentials.NewStaticV2(accessKeyID, secretAccessKey, "")
+	clnt, err := privateNew(endpoint, creds, secure, "")
 	if err != nil {
 		return nil, err
 	}
-	// Set to use signature version '2'.
-	clnt.signature = SignatureV2
+	clnt.overrideSignerType = credentials.SignatureV2
 	return clnt, nil
 }
 
 // NewV4 - instantiate minio client with Amazon S3 signature version
 // '4' compatibility.
 func NewV4(endpoint string, accessKeyID, secretAccessKey string, secure bool) (*Client, error) {
-	clnt, err := privateNew(endpoint, accessKeyID, secretAccessKey, secure)
+	creds := credentials.NewStaticV4(accessKeyID, secretAccessKey, "")
+	clnt, err := privateNew(endpoint, creds, secure, "")
 	if err != nil {
 		return nil, err
 	}
-	// Set to use signature version '4'.
-	clnt.signature = SignatureV4
+	clnt.overrideSignerType = credentials.SignatureV4
 	return clnt, nil
 }
 
-// New - instantiate minio client Client, adds automatic verification
-// of signature.
-func New(endpoint string, accessKeyID, secretAccessKey string, secure bool) (*Client, error) {
-	clnt, err := privateNew(endpoint, accessKeyID, secretAccessKey, secure)
+// New - instantiate minio client, adds automatic verification of signature.
+func New(endpoint, accessKeyID, secretAccessKey string, secure bool) (*Client, error) {
+	creds := credentials.NewStaticV4(accessKeyID, secretAccessKey, "")
+	clnt, err := privateNew(endpoint, creds, secure, "")
 	if err != nil {
 		return nil, err
 	}
 	// Google cloud storage should be set to signature V2, force it if not.
 	if s3utils.IsGoogleEndpoint(clnt.endpointURL) {
-		clnt.signature = SignatureV2
+		clnt.overrideSignerType = credentials.SignatureV2
 	}
-	// If Amazon S3 set to signature v2.n
+	// If Amazon S3 set to signature v4.
 	if s3utils.IsAmazonEndpoint(clnt.endpointURL) {
-		clnt.signature = SignatureV4
+		clnt.overrideSignerType = credentials.SignatureV4
 	}
 	return clnt, nil
+}
+
+// NewWithCredentials - instantiate minio client with credentials provider
+// for retrieving credentials from various credentials provider such as
+// IAM, File, Env etc.
+func NewWithCredentials(endpoint string, creds *credentials.Credentials, secure bool, region string) (*Client, error) {
+	return privateNew(endpoint, creds, secure, region)
+}
+
+// NewWithRegion - instantiate minio client, with region configured. Unlike New(),
+// NewWithRegion avoids bucket-location lookup operations and it is slightly faster.
+// Use this function when if your application deals with single region.
+func NewWithRegion(endpoint, accessKeyID, secretAccessKey string, secure bool, region string) (*Client, error) {
+	creds := credentials.NewStaticV4(accessKeyID, secretAccessKey, "")
+	return privateNew(endpoint, creds, secure, region)
 }
 
 // lockedRandSource provides protected rand source, implements rand.Source interface.
@@ -141,8 +163,7 @@ type lockedRandSource struct {
 	src rand.Source
 }
 
-// Int63 returns a non-negative pseudo-random 63-bit integer as an
-// int64.
+// Int63 returns a non-negative pseudo-random 63-bit integer as an int64.
 func (r *lockedRandSource) Int63() (n int64) {
 	r.lk.Lock()
 	n = r.src.Int63()
@@ -170,7 +191,32 @@ func redirectHeaders(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-func privateNew(endpoint, accessKeyID, secretAccessKey string, secure bool) (*Client, error) {
+// getRegionFromURL - parse region from URL if present.
+func getRegionFromURL(u url.URL) (region string) {
+	region = ""
+	if s3utils.IsGoogleEndpoint(u) {
+		return
+	} else if s3utils.IsAmazonChinaEndpoint(u) {
+		// For china specifically we need to set everything to
+		// cn-north-1 for now, there is no easier way until AWS S3
+		// provides a cleaner compatible API across "us-east-1" and
+		// China region.
+		return "cn-north-1"
+	} else if s3utils.IsAmazonGovCloudEndpoint(u) {
+		// For us-gov specifically we need to set everything to
+		// us-gov-west-1 for now, there is no easier way until AWS S3
+		// provides a cleaner compatible API across "us-east-1" and
+		// Gov cloud region.
+		return "us-gov-west-1"
+	}
+	parts := s3utils.AmazonS3Host.FindStringSubmatch(u.Host)
+	if len(parts) > 1 {
+		region = parts[1]
+	}
+	return region
+}
+
+func privateNew(endpoint string, creds *credentials.Credentials, secure bool, region string) (*Client, error) {
 	// construct endpoint.
 	endpointURL, err := getEndpointURL(endpoint, secure)
 	if err != nil {
@@ -179,11 +225,9 @@ func privateNew(endpoint, accessKeyID, secretAccessKey string, secure bool) (*Cl
 
 	// instantiate new Client.
 	clnt := new(Client)
-	clnt.accessKeyID = accessKeyID
-	clnt.secretAccessKey = secretAccessKey
-	if clnt.accessKeyID == "" || clnt.secretAccessKey == "" {
-		clnt.anonymous = true
-	}
+
+	// Save the credentials.
+	clnt.credsProvider = creds
 
 	// Remember whether we are using https or not
 	clnt.secure = secure
@@ -193,11 +237,17 @@ func privateNew(endpoint, accessKeyID, secretAccessKey string, secure bool) (*Cl
 
 	// Instantiate http client and bucket location cache.
 	clnt.httpClient = &http.Client{
-		Transport:     http.DefaultTransport,
+		Transport:     defaultMinioTransport,
 		CheckRedirect: redirectHeaders,
 	}
 
-	// Instantiae bucket location cache.
+	// Sets custom region, if region is empty bucket location cache is used automatically.
+	if region == "" {
+		region = getRegionFromURL(clnt.endpointURL)
+	}
+	clnt.region = region
+
+	// Instantiate bucket location cache.
 	clnt.bucketLocCache = newBucketLocationCache()
 
 	// Introduce a new locked random seed.
@@ -271,6 +321,29 @@ func (c *Client) SetS3TransferAccelerate(accelerateEndpoint string) {
 	}
 }
 
+// Hash materials provides relevant initialized hash algo writers
+// based on the expected signature type.
+//
+//  - For signature v4 request if the connection is insecure compute only sha256.
+//  - For signature v4 request if the connection is secure compute only md5.
+//  - For anonymous request compute md5.
+func (c *Client) hashMaterials() (hashAlgos map[string]hash.Hash, hashSums map[string][]byte) {
+	hashSums = make(map[string][]byte)
+	hashAlgos = make(map[string]hash.Hash)
+	if c.overrideSignerType.IsV4() {
+		if c.secure {
+			hashAlgos["md5"] = md5.New()
+		} else {
+			hashAlgos["sha256"] = sha256.New()
+		}
+	} else {
+		if c.overrideSignerType.IsAnonymous() {
+			hashAlgos["md5"] = md5.New()
+		}
+	}
+	return hashAlgos, hashSums
+}
+
 // requestMetadata - is container for all the values to make a request.
 type requestMetadata struct {
 	// If set newRequest presigns the URL.
@@ -291,41 +364,6 @@ type requestMetadata struct {
 	contentMD5Bytes    []byte
 }
 
-// regCred matches credential string in HTTP header
-var regCred = regexp.MustCompile("Credential=([A-Z0-9]+)/")
-
-// regCred matches signature string in HTTP header
-var regSign = regexp.MustCompile("Signature=([[0-9a-f]+)")
-
-// Filter out signature value from Authorization header.
-func (c Client) filterSignature(req *http.Request) {
-	// For anonymous requests, no need to filter.
-	if c.anonymous {
-		return
-	}
-	// Handle if Signature V2.
-	if c.signature.isV2() {
-		// Set a temporary redacted auth
-		req.Header.Set("Authorization", "AWS **REDACTED**:**REDACTED**")
-		return
-	}
-
-	/// Signature V4 authorization header.
-
-	// Save the original auth.
-	origAuth := req.Header.Get("Authorization")
-	// Strip out accessKeyID from:
-	// Credential=<access-key-id>/<date>/<aws-region>/<aws-service>/aws4_request
-	newAuth := regCred.ReplaceAllString(origAuth, "Credential=**REDACTED**/")
-
-	// Strip out 256-bit signature from: Signature=<256-bit signature>
-	newAuth = regSign.ReplaceAllString(newAuth, "Signature=**REDACTED**")
-
-	// Set a temporary redacted auth
-	req.Header.Set("Authorization", newAuth)
-	return
-}
-
 // dumpHTTP - dump HTTP request and response.
 func (c Client) dumpHTTP(req *http.Request, resp *http.Response) error {
 	// Starts http dump.
@@ -335,7 +373,10 @@ func (c Client) dumpHTTP(req *http.Request, resp *http.Response) error {
 	}
 
 	// Filter out Signature field from Authorization header.
-	c.filterSignature(req)
+	origAuth := req.Header.Get("Authorization")
+	if origAuth != "" {
+		req.Header.Set("Authorization", redactSignature(origAuth))
+	}
 
 	// Only display request header.
 	reqTrace, err := httputil.DumpRequestOut(req, false)
@@ -411,7 +452,7 @@ func (c Client) do(req *http.Request) (*http.Response, error) {
 				return nil, &url.Error{
 					Op:  urlErr.Op,
 					URL: urlErr.URL,
-					Err: fmt.Errorf("Connection closed by foreign host %s. Retry again.", urlErr.URL),
+					Err: errors.New("Connection closed by foreign host " + urlErr.URL + ". Retry again."),
 				}
 			}
 			return nil, err
@@ -454,15 +495,33 @@ var successStatus = []int{
 // executeMethod - instantiates a given method, and retries the
 // request upon any error up to maxRetries attempts in a binomially
 // delayed manner using a standard back off algorithm.
-func (c Client) executeMethod(method string, metadata requestMetadata) (res *http.Response, err error) {
+func (c Client) executeMethod(ctx context.Context, method string, metadata requestMetadata) (res *http.Response, err error) {
 	var isRetryable bool     // Indicates if request can be retried.
 	var bodySeeker io.Seeker // Extracted seeker from io.Reader.
+	var reqRetry = MaxRetry  // Indicates how many times we can retry the request
+
 	if metadata.contentBody != nil {
 		// Check if body is seekable then it is retryable.
 		bodySeeker, isRetryable = metadata.contentBody.(io.Seeker)
+		switch bodySeeker {
+		case os.Stdin, os.Stdout, os.Stderr:
+			isRetryable = false
+		}
+		// Retry only when reader is seekable
+		if !isRetryable {
+			reqRetry = 1
+		}
+
+		// Figure out if the body can be closed - if yes
+		// we will definitely close it upon the function
+		// return.
+		bodyCloser, ok := metadata.contentBody.(io.Closer)
+		if ok {
+			defer bodyCloser.Close()
+		}
 	}
 
-	// Create a done channel to control 'ListObjects' go routine.
+	// Create a done channel to control 'newRetryTimer' go routine.
 	doneCh := make(chan struct{}, 1)
 
 	// Indicate to our routine to exit cleanly upon return.
@@ -471,7 +530,7 @@ func (c Client) executeMethod(method string, metadata requestMetadata) (res *htt
 	// Blank indentifier is kept here on purpose since 'range' without
 	// blank identifiers is only supported since go1.4
 	// https://golang.org/doc/go1.4#forrange.
-	for _ = range c.newRetryTimer(MaxRetry, time.Second, time.Second*30, MaxJitter, doneCh) {
+	for range c.newRetryTimer(reqRetry, DefaultRetryUnit, DefaultRetryCap, MaxJitter, doneCh) {
 		// Retry executes the following function body if request has an
 		// error until maxRetries have been exhausted, retry attempts are
 		// performed after waiting for a given period of time in a
@@ -494,6 +553,8 @@ func (c Client) executeMethod(method string, metadata requestMetadata) (res *htt
 			}
 			return nil, err
 		}
+		// Add context to request
+		req = req.WithContext(ctx)
 
 		// Initiate the request.
 		res, err = c.do(req)
@@ -520,17 +581,34 @@ func (c Client) executeMethod(method string, metadata requestMetadata) (res *htt
 		if err != nil {
 			return nil, err
 		}
+
 		// Save the body.
 		errBodySeeker := bytes.NewReader(errBodyBytes)
 		res.Body = ioutil.NopCloser(errBodySeeker)
 
 		// For errors verify if its retryable otherwise fail quickly.
 		errResponse := ToErrorResponse(httpRespToErrorResponse(res, metadata.bucketName, metadata.objectName))
-		// Bucket region if set in error response, we can retry the
-		// request with the new region.
-		if errResponse.Region != "" {
-			c.bucketLocCache.Set(metadata.bucketName, errResponse.Region)
-			continue // Retry.
+
+		// Save the body back again.
+		errBodySeeker.Seek(0, 0) // Seek back to starting point.
+		res.Body = ioutil.NopCloser(errBodySeeker)
+
+		// Bucket region if set in error response and the error
+		// code dictates invalid region, we can retry the request
+		// with the new region.
+		//
+		// Additionally we should only retry if bucketLocation and custom
+		// region is empty.
+		if metadata.bucketLocation == "" && c.region == "" {
+			if errResponse.Code == "AuthorizationHeaderMalformed" || errResponse.Code == "InvalidRegion" {
+				if metadata.bucketName != "" && errResponse.Region != "" {
+					// Gather Cached location only if bucketName is present.
+					if _, cachedLocationError := c.bucketLocCache.Get(metadata.bucketName); cachedLocationError != false {
+						c.bucketLocCache.Set(metadata.bucketName, errResponse.Region)
+						continue // Retry.
+					}
+				}
+			}
 		}
 
 		// Verify if error response code is retryable.
@@ -542,10 +620,6 @@ func (c Client) executeMethod(method string, metadata requestMetadata) (res *htt
 		if isHTTPStatusRetryable(res.StatusCode) {
 			continue // Retry.
 		}
-
-		// Save the body back again.
-		errBodySeeker.Seek(0, 0) // Seek back to starting point.
-		res.Body = ioutil.NopCloser(errBodySeeker)
 
 		// For all other cases break out of the retry loop.
 		break
@@ -560,29 +634,27 @@ func (c Client) newRequest(method string, metadata requestMetadata) (req *http.R
 		method = "POST"
 	}
 
-	// Default all requests to "us-east-1" or "cn-north-1" (china region)
-	location := "us-east-1"
-	if s3utils.IsAmazonChinaEndpoint(c.endpointURL) {
-		// For china specifically we need to set everything to
-		// cn-north-1 for now, there is no easier way until AWS S3
-		// provides a cleaner compatible API across "us-east-1" and
-		// China region.
-		location = "cn-north-1"
-	}
-
-	// Gather location only if bucketName is present.
-	if metadata.bucketName != "" {
-		location, err = c.getBucketLocation(metadata.bucketName)
-		if err != nil {
-			return nil, err
+	location := metadata.bucketLocation
+	if location == "" {
+		if metadata.bucketName != "" {
+			// Gather location only if bucketName is present.
+			location, err = c.getBucketLocation(metadata.bucketName)
+			if err != nil {
+				if ToErrorResponse(err).Code != "AccessDenied" {
+					return nil, err
+				}
+			}
+			// Upon AccessDenied error on fetching bucket location, default
+			// to possible locations based on endpoint URL. This can usually
+			// happen when GetBucketLocation() is disabled using IAM policies.
+		}
+		if location == "" {
+			location = getDefaultLocation(c.endpointURL, c.region)
 		}
 	}
 
-	// Save location.
-	metadata.bucketLocation = location
-
 	// Construct a new target URL.
-	targetURL, err := c.makeTargetURL(metadata.bucketName, metadata.objectName, metadata.bucketLocation, metadata.queryValues)
+	targetURL, err := c.makeTargetURL(metadata.bucketName, metadata.objectName, location, metadata.queryValues)
 	if err != nil {
 		return nil, err
 	}
@@ -593,32 +665,43 @@ func (c Client) newRequest(method string, metadata requestMetadata) (req *http.R
 		return nil, err
 	}
 
+	// Get credentials from the configured credentials provider.
+	value, err := c.credsProvider.Get()
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		signerType      = value.SignerType
+		accessKeyID     = value.AccessKeyID
+		secretAccessKey = value.SecretAccessKey
+		sessionToken    = value.SessionToken
+	)
+
+	// Custom signer set then override the behavior.
+	if c.overrideSignerType != credentials.SignatureDefault {
+		signerType = c.overrideSignerType
+	}
+
+	// If signerType returned by credentials helper is anonymous,
+	// then do not sign regardless of signerType override.
+	if value.SignerType == credentials.SignatureAnonymous {
+		signerType = credentials.SignatureAnonymous
+	}
+
 	// Generate presign url if needed, return right here.
 	if metadata.expires != 0 && metadata.presignURL {
-		if c.anonymous {
-			return nil, ErrInvalidArgument("Requests cannot be presigned with anonymous credentials.")
+		if signerType.IsAnonymous() {
+			return nil, ErrInvalidArgument("Presigned URLs cannot be generated with anonymous credentials.")
 		}
-		if c.signature.isV2() {
+		if signerType.IsV2() {
 			// Presign URL with signature v2.
-			req = s3signer.PreSignV2(*req, c.accessKeyID, c.secretAccessKey, metadata.expires)
-		} else {
+			req = s3signer.PreSignV2(*req, accessKeyID, secretAccessKey, metadata.expires)
+		} else if signerType.IsV4() {
 			// Presign URL with signature v4.
-			req = s3signer.PreSignV4(*req, c.accessKeyID, c.secretAccessKey, location, metadata.expires)
+			req = s3signer.PreSignV4(*req, accessKeyID, secretAccessKey, sessionToken, location, metadata.expires)
 		}
 		return req, nil
-	}
-
-	// Set content body if available.
-	if metadata.contentBody != nil {
-		req.Body = ioutil.NopCloser(metadata.contentBody)
-	}
-
-	// FIXME: Enable this when Google Cloud Storage properly supports 100-continue.
-	// Skip setting 'expect' header for Google Cloud Storage, there
-	// are some known issues - https://github.com/restic/restic/issues/520
-	if !s3utils.IsGoogleEndpoint(c.endpointURL) && c.s3AccelerateEndpoint == "" {
-		// Set 'Expect' header for the request.
-		req.Header.Set("Expect", "100-continue")
 	}
 
 	// Set 'User-Agent' header for the request.
@@ -629,26 +712,21 @@ func (c Client) newRequest(method string, metadata requestMetadata) (req *http.R
 		req.Header.Set(k, v[0])
 	}
 
-	// set incoming content-length.
-	if metadata.contentLength > 0 {
-		req.ContentLength = metadata.contentLength
+	// Go net/http notoriously closes the request body.
+	// - The request Body, if non-nil, will be closed by the underlying Transport, even on errors.
+	// This can cause underlying *os.File seekers to fail, avoid that
+	// by making sure to wrap the closer as a nop.
+	if metadata.contentLength == 0 {
+		req.Body = nil
+	} else {
+		req.Body = ioutil.NopCloser(metadata.contentBody)
 	}
 
-	// Set sha256 sum only for non anonymous credentials.
-	if !c.anonymous {
-		// set sha256 sum for signature calculation only with
-		// signature version '4'.
-		if c.signature.isV4() {
-			shaHeader := unsignedPayload
-			if !c.secure {
-				if metadata.contentSHA256Bytes == nil {
-					shaHeader = hex.EncodeToString(sum256([]byte{}))
-				} else {
-					shaHeader = hex.EncodeToString(metadata.contentSHA256Bytes)
-				}
-			}
-			req.Header.Set("X-Amz-Content-Sha256", shaHeader)
-		}
+	// Set incoming content-length.
+	req.ContentLength = metadata.contentLength
+	if req.ContentLength <= -1 {
+		// For unknown content length, we upload using transfer-encoding: chunked.
+		req.TransferEncoding = []string{"chunked"}
 	}
 
 	// set md5Sum for content protection.
@@ -656,15 +734,31 @@ func (c Client) newRequest(method string, metadata requestMetadata) (req *http.R
 		req.Header.Set("Content-Md5", base64.StdEncoding.EncodeToString(metadata.contentMD5Bytes))
 	}
 
-	// Sign the request for all authenticated requests.
-	if !c.anonymous {
-		if c.signature.isV2() {
-			// Add signature version '2' authorization header.
-			req = s3signer.SignV2(*req, c.accessKeyID, c.secretAccessKey)
-		} else if c.signature.isV4() {
-			// Add signature version '4' authorization header.
-			req = s3signer.SignV4(*req, c.accessKeyID, c.secretAccessKey, location)
+	// For anonymous requests just return.
+	if signerType.IsAnonymous() {
+		return req, nil
+	}
+
+	switch {
+	case signerType.IsV2():
+		// Add signature version '2' authorization header.
+		req = s3signer.SignV2(*req, accessKeyID, secretAccessKey)
+	case metadata.objectName != "" && method == "PUT" && metadata.customHeader.Get("X-Amz-Copy-Source") == "" && !c.secure:
+		// Streaming signature is used by default for a PUT object request. Additionally we also
+		// look if the initialized client is secure, if yes then we don't need to perform
+		// streaming signature.
+		req = s3signer.StreamingSignV4(req, accessKeyID,
+			secretAccessKey, sessionToken, location, metadata.contentLength, time.Now().UTC())
+	default:
+		// Set sha256 sum for signature calculation only with signature version '4'.
+		shaHeader := unsignedPayload
+		if len(metadata.contentSHA256Bytes) > 0 {
+			shaHeader = hex.EncodeToString(metadata.contentSHA256Bytes)
 		}
+		req.Header.Set("X-Amz-Content-Sha256", shaHeader)
+
+		// Add signature version '4' authorization header.
+		req = s3signer.SignV4(*req, accessKeyID, secretAccessKey, sessionToken, location)
 	}
 
 	// Return request.
@@ -695,13 +789,25 @@ func (c Client) makeTargetURL(bucketName, objectName, bucketLocation string, que
 			// http://docs.aws.amazon.com/AmazonS3/latest/dev/transfer-acceleration.html
 			host = c.s3AccelerateEndpoint
 		} else {
-			// Fetch new host based on the bucket location.
-			host = getS3Endpoint(bucketLocation)
+			// Do not change the host if the endpoint URL is a FIPS S3 endpoint.
+			if !s3utils.IsAmazonFIPSGovCloudEndpoint(c.endpointURL) {
+				// Fetch new host based on the bucket location.
+				host = getS3Endpoint(bucketLocation)
+			}
 		}
 	}
 
 	// Save scheme.
 	scheme := c.endpointURL.Scheme
+
+	// Strip port 80 and 443 so we won't send these ports in Host header.
+	// The reason is that browsers and curl automatically remove :80 and :443
+	// with the generated presigned urls, then a signature mismatch error.
+	if h, p, err := net.SplitHostPort(host); err == nil {
+		if scheme == "http" && p == "80" || scheme == "https" && p == "443" {
+			host = h
+		}
+	}
 
 	urlStr := scheme + "://" + host + "/"
 	// Make URL only if bucketName is available, otherwise use the
@@ -726,13 +832,16 @@ func (c Client) makeTargetURL(bucketName, objectName, bucketLocation string, que
 			}
 		}
 	}
+
 	// If there are any query values, add them to the end.
 	if len(queryValues) > 0 {
 		urlStr = urlStr + "?" + s3utils.QueryEncode(queryValues)
 	}
+
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, err
 	}
+
 	return u, nil
 }

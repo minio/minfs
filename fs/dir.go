@@ -412,11 +412,7 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 		return err
 	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+	return tx.Commit()
 }
 
 // store the dir object in cache
@@ -624,9 +620,5 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 	}
 
 	// Commit the transaction and check for error.
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+	return tx.Commit()
 }

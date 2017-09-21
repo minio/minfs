@@ -24,7 +24,7 @@ import (
 
 	"gopkg.in/vmihailenco/msgpack.v2"
 
-	"github.com/boltdb/bolt"
+	"github.com/coreos/bbolt"
 	minio "github.com/minio/minio-go"
 )
 

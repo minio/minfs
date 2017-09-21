@@ -20,8 +20,10 @@ package minfs
 import (
 	"fmt"
 	"log"
+	"mime"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -209,11 +211,7 @@ func (mfs *MinFS) Serve() (err error) {
 	}
 
 	<-c.Ready
-	if err = c.MountError; err != nil {
-		return err
-	}
-
-	return nil
+	return c.MountError
 }
 
 func (mfs *MinFS) shutdown() {
@@ -227,26 +225,35 @@ func (mfs *MinFS) sync(req interface{}) error {
 }
 
 func (mfs *MinFS) moveOp(req *MoveOperation) {
-	// TODO: using copyObject limits the size of the server side copy to 5GB (S3 Spec) limit.
-	err := mfs.api.CopyObject(mfs.config.bucket, req.Target, path.Join(mfs.config.bucket, req.Source), minio.NewCopyConditions())
-	if err == nil {
-		err = mfs.api.RemoveObject(mfs.config.bucket, req.Source)
-		if err == nil {
-			req.Error <- nil
-			return
-		}
+	src := minio.NewSourceInfo(mfs.config.bucket, req.Source, nil)
+	dst, err := minio.NewDestinationInfo(mfs.config.bucket, req.Target, nil, nil)
+	if err != nil {
+		req.Error <- err
+		return
 	}
-	req.Error <- err
+	if err = mfs.api.CopyObject(dst, src); err != nil {
+		req.Error <- err
+		return
+	}
+	if err = mfs.api.RemoveObject(mfs.config.bucket, req.Source); err != nil {
+		req.Error <- err
+		return
+	}
+	req.Error <- nil
 }
 
 func (mfs *MinFS) copyOp(req *CopyOperation) {
-	// TODO: using copyObject limits the size of the server side copy to 5GB (S3 Spec) limit.
-	err := mfs.api.CopyObject(mfs.config.bucket, req.Target, path.Join(mfs.config.bucket, req.Source), minio.NewCopyConditions())
-	if err == nil {
-		req.Error <- nil
+	src := minio.NewSourceInfo(mfs.config.bucket, req.Source, nil)
+	dst, err := minio.NewDestinationInfo(mfs.config.bucket, req.Target, nil, nil)
+	if err != nil {
+		req.Error <- err
 		return
 	}
-	req.Error <- err
+	if err = mfs.api.CopyObject(dst, src); err != nil {
+		req.Error <- err
+		return
+	}
+	req.Error <- nil
 }
 
 func (mfs *MinFS) putOp(req *PutOperation) {
@@ -257,12 +264,10 @@ func (mfs *MinFS) putOp(req *PutOperation) {
 	}
 	defer r.Close()
 
-	// The limited reader will cause truncated files to be uploaded truncated.
-	// The file size is the actual file size, the cache file could not be
-	// truncated yet the SizedLimitedReader ensures that a Content-Length
-	// will be sent, otherwise files with size 0 will not be uploaded
-	slr := NewSizedLimitedReader(r, req.Length)
-	_, err = mfs.api.PutObject(mfs.config.bucket, req.Target, slr, "application/octet-stream")
+	ops := &minio.PutObjectOptions{
+		ContentType: mime.TypeByExtension(filepath.Ext(req.Target)),
+	}
+	_, err = mfs.api.PutObject(mfs.config.bucket, req.Target, r, req.Length, ops)
 	if err != nil {
 		req.Error <- err
 		return

@@ -18,10 +18,13 @@ package minio
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"io"
 	"net/http"
 	"net/url"
+
+	"github.com/minio/minio-go/pkg/s3utils"
 )
 
 // RemoveBucket deletes the bucket name.
@@ -30,12 +33,13 @@ import (
 //  in the bucket must be deleted before successfully attempting this request.
 func (c Client) RemoveBucket(bucketName string) error {
 	// Input validation.
-	if err := isValidBucketName(bucketName); err != nil {
+	if err := s3utils.CheckValidBucketName(bucketName); err != nil {
 		return err
 	}
 	// Execute DELETE on bucket.
-	resp, err := c.executeMethod("DELETE", requestMetadata{
-		bucketName: bucketName,
+	resp, err := c.executeMethod(context.Background(), "DELETE", requestMetadata{
+		bucketName:         bucketName,
+		contentSHA256Bytes: emptySHA256,
 	})
 	defer closeResponse(resp)
 	if err != nil {
@@ -56,16 +60,17 @@ func (c Client) RemoveBucket(bucketName string) error {
 // RemoveObject remove an object from a bucket.
 func (c Client) RemoveObject(bucketName, objectName string) error {
 	// Input validation.
-	if err := isValidBucketName(bucketName); err != nil {
+	if err := s3utils.CheckValidBucketName(bucketName); err != nil {
 		return err
 	}
-	if err := isValidObjectName(objectName); err != nil {
+	if err := s3utils.CheckValidObjectName(objectName); err != nil {
 		return err
 	}
 	// Execute DELETE on objectName.
-	resp, err := c.executeMethod("DELETE", requestMetadata{
-		bucketName: bucketName,
-		objectName: objectName,
+	resp, err := c.executeMethod(context.Background(), "DELETE", requestMetadata{
+		bucketName:         bucketName,
+		objectName:         objectName,
+		contentSHA256Bytes: emptySHA256,
 	})
 	defer closeResponse(resp)
 	if err != nil {
@@ -130,7 +135,7 @@ func (c Client) RemoveObjects(bucketName string, objectsCh <-chan string) <-chan
 	errorCh := make(chan RemoveObjectError, 1)
 
 	// Validate if bucket name is valid.
-	if err := isValidBucketName(bucketName); err != nil {
+	if err := s3utils.CheckValidBucketName(bucketName); err != nil {
 		defer close(errorCh)
 		errorCh <- RemoveObjectError{
 			Err: err,
@@ -172,7 +177,7 @@ func (c Client) RemoveObjects(bucketName string, objectsCh <-chan string) <-chan
 				}
 			}
 			if count == 0 {
-				// Multi Objects Delete API doesn't accept empty object list, quit immediatly
+				// Multi Objects Delete API doesn't accept empty object list, quit immediately
 				break
 			}
 			if count < maxEntries {
@@ -183,7 +188,7 @@ func (c Client) RemoveObjects(bucketName string, objectsCh <-chan string) <-chan
 			// Generate remove multi objects XML request
 			removeBytes := generateRemoveMultiObjectsRequest(batch)
 			// Execute GET on bucket to list objects.
-			resp, err := c.executeMethod("POST", requestMetadata{
+			resp, err := c.executeMethod(context.Background(), "POST", requestMetadata{
 				bucketName:         bucketName,
 				queryValues:        urlValues,
 				contentBody:        bytes.NewReader(removeBytes),
@@ -208,13 +213,12 @@ func (c Client) RemoveObjects(bucketName string, objectsCh <-chan string) <-chan
 }
 
 // RemoveIncompleteUpload aborts an partially uploaded object.
-// Requires explicit authentication, no anonymous requests are allowed for multipart API.
 func (c Client) RemoveIncompleteUpload(bucketName, objectName string) error {
 	// Input validation.
-	if err := isValidBucketName(bucketName); err != nil {
+	if err := s3utils.CheckValidBucketName(bucketName); err != nil {
 		return err
 	}
-	if err := isValidObjectName(objectName); err != nil {
+	if err := s3utils.CheckValidObjectName(objectName); err != nil {
 		return err
 	}
 	// Find multipart upload id of the object to be aborted.
@@ -224,7 +228,7 @@ func (c Client) RemoveIncompleteUpload(bucketName, objectName string) error {
 	}
 	if uploadID != "" {
 		// Upload id found, abort the incomplete multipart upload.
-		err := c.abortMultipartUpload(bucketName, objectName, uploadID)
+		err := c.abortMultipartUpload(context.Background(), bucketName, objectName, uploadID)
 		if err != nil {
 			return err
 		}
@@ -234,12 +238,12 @@ func (c Client) RemoveIncompleteUpload(bucketName, objectName string) error {
 
 // abortMultipartUpload aborts a multipart upload for the given
 // uploadID, all previously uploaded parts are deleted.
-func (c Client) abortMultipartUpload(bucketName, objectName, uploadID string) error {
+func (c Client) abortMultipartUpload(ctx context.Context, bucketName, objectName, uploadID string) error {
 	// Input validation.
-	if err := isValidBucketName(bucketName); err != nil {
+	if err := s3utils.CheckValidBucketName(bucketName); err != nil {
 		return err
 	}
-	if err := isValidObjectName(objectName); err != nil {
+	if err := s3utils.CheckValidObjectName(objectName); err != nil {
 		return err
 	}
 
@@ -248,10 +252,11 @@ func (c Client) abortMultipartUpload(bucketName, objectName, uploadID string) er
 	urlValues.Set("uploadId", uploadID)
 
 	// Execute DELETE on multipart upload.
-	resp, err := c.executeMethod("DELETE", requestMetadata{
-		bucketName:  bucketName,
-		objectName:  objectName,
-		queryValues: urlValues,
+	resp, err := c.executeMethod(ctx, "DELETE", requestMetadata{
+		bucketName:         bucketName,
+		objectName:         objectName,
+		queryValues:        urlValues,
+		contentSHA256Bytes: emptySHA256,
 	})
 	defer closeResponse(resp)
 	if err != nil {

@@ -17,13 +17,11 @@
 package minfs
 
 import (
-	"fmt"
 	"net/url"
 	"os"
 	"path"
-	"time"
+	"strings"
 
-	"github.com/minio/minfs/meta"
 	minio "github.com/minio/minio-go"
 )
 
@@ -45,27 +43,15 @@ func (mfs *MinFS) startNotificationListener() error {
 				if err != nil {
 					panic(err)
 				}
-
-				defer tx.Rollback()
-
 				for _, record := range notificationInfo.Records {
 					key, e := url.QueryUnescape(record.S3.Object.Key)
 					if e != nil {
-						fmt.Print("Error:", err)
+						mfs.log.Println("Error:", err)
+						tx.Rollback()
 						continue
 					}
 
 					dir, file := path.Split(key)
-
-					b := tx.Bucket("minio/")
-					if dir != "" {
-						v, err := b.CreateBucketIfNotExists(dir)
-						if err != nil {
-							fmt.Print("Error:", err)
-							continue
-						}
-						b = v
-					}
 
 					var d *Dir
 					if dir == "" {
@@ -88,35 +74,14 @@ func (mfs *MinFS) startNotificationListener() error {
 						}
 					}
 
-					var f interface{}
-					if err := b.Get(file, &f); err == nil {
-					} else if !meta.IsNoSuchObject(err) {
-						fmt.Println("Error:", err)
-						continue
-					} else if i, err := mfs.NextSequence(tx); err != nil {
-						fmt.Println("Error:", err)
-						continue
-					} else {
-						objMeta := record.S3.Object
-						lastModified := time.Now().UTC()
-						f = &File{
-							dir:     d,
-							mfs:     mfs,
-							Size:    uint64(objMeta.Size),
-							Inode:   i,
-							UID:     mfs.config.uid,
-							GID:     mfs.config.gid,
-							Mode:    mfs.config.mode,
-							Path:    file,
-							Chgtime: lastModified,
-							Crtime:  lastModified,
-							Mtime:   lastModified,
-							Atime:   lastModified,
-							ETag:    objMeta.ETag,
-						}
-
-						if err := f.(*File).store(tx); err != nil {
-							fmt.Println("Error:", err)
+					if strings.HasPrefix(record.EventName, "s3:ObjectCreated:") {
+						if err = d.storeFile(d.bucket(tx), tx, file, minio.ObjectInfo{
+							Key:  record.S3.Object.Key,
+							Size: record.S3.Object.Size,
+							ETag: record.S3.Object.ETag,
+						}); err != nil {
+							tx.Rollback()
+							mfs.log.Println("Error:", err)
 							continue
 						}
 					}
@@ -125,6 +90,7 @@ func (mfs *MinFS) startNotificationListener() error {
 
 				// Commit the transaction and check for error.
 				if err := tx.Commit(); err != nil {
+					tx.Rollback()
 					panic(err)
 				}
 			case <-mfs.listenerDoneCh:

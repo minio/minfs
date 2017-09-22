@@ -33,13 +33,14 @@ type Config struct {
 	bucket   string
 	basePath string
 
-	cache      string
-	accountID  string
-	accessKey  string
-	secretKey  string
-	target     *url.URL
-	mountpoint string
-	debug      bool
+	cache       string
+	accountID   string
+	accessKey   string
+	secretKey   string
+	secretToken string
+	target      *url.URL
+	mountpoint  string
+	debug       bool
 
 	uid  uint32
 	gid  uint32
@@ -48,9 +49,10 @@ type Config struct {
 
 // AccessConfig - access credentials and version of `config.json`.
 type AccessConfig struct {
-	Version   string `json:"version"`
-	AccessKey string `json:"accessKey"`
-	SecretKey string `json:"secretKey"`
+	Version     string `json:"version"`
+	AccessKey   string `json:"accessKey"`
+	SecretKey   string `json:"secretKey"`
+	SecretToken string `json:"secretToken"`
 }
 
 // InitMinFSConfig - Initialize MinFS configuration file.
@@ -64,9 +66,10 @@ func InitMinFSConfig() (*AccessConfig, error) {
 		if os.IsNotExist(err) {
 			console.Println("Initializing config.json for the first time, please update your access credentials.")
 			ac := &AccessConfig{
-				Version:   "1",
-				AccessKey: os.Getenv("MINFS_ACCESS_KEY"),
-				SecretKey: os.Getenv("MINFS_SECRET_KEY"),
+				Version:     "1",
+				AccessKey:   os.Getenv("MINFS_ACCESS_KEY"),
+				SecretKey:   os.Getenv("MINFS_SECRET_KEY"),
+				SecretToken: os.Getenv("MINFS_SECRET_TOKEN"),
 			}
 			acBytes, jerr := json.Marshal(ac)
 			if jerr != nil {
@@ -90,9 +93,15 @@ func InitMinFSConfig() (*AccessConfig, error) {
 	// Override if access keys are set through env.
 	accessKey := os.Getenv("MINFS_ACCESS_KEY")
 	secretKey := os.Getenv("MINFS_SECRET_KEY")
-	if accessKey != "" && secretKey != "" {
+	secretToken := os.Getenv("MINFS_SECRET_TOKEN")
+	if accessKey != "" {
 		ac.AccessKey = accessKey
+	}
+	if secretKey != "" {
 		ac.SecretKey = secretKey
+	}
+	if secretToken != "" {
+		ac.SecretToken = secretToken
 	}
 	return ac, nil
 }

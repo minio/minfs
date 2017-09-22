@@ -32,6 +32,7 @@ import (
 
 	"github.com/minio/minfs/meta"
 	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/pkg/credentials"
 
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
@@ -170,34 +171,38 @@ func (mfs *MinFS) Serve() (err error) {
 	}
 
 	mfs.log.Println("Initializing minio client...")
-	host := mfs.config.target.Host
-	access := mfs.config.accessKey
-	secret := mfs.config.secretKey
-	secure := mfs.config.target.Scheme == "https"
-	mfs.api, err = minio.NewV4(host, access, secret, secure)
+
+	var (
+		host   = mfs.config.target.Host
+		access = mfs.config.accessKey
+		secret = mfs.config.secretKey
+		token  = mfs.config.secretToken
+		secure = mfs.config.target.Scheme == "https"
+	)
+
+	creds := credentials.NewStaticV4(access, secret, token)
+	mfs.api, err = minio.NewWithCredentials(host, creds, secure, "")
 	if err != nil {
 		return err
 	}
+
 	// Validate if the bucket is valid and accessible.
 	exists, err := mfs.api.BucketExists(mfs.config.bucket)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		return minio.ErrorResponse{
-			BucketName: mfs.config.bucket,
-			Code:       "NoSuchBucket",
-			Message:    "The specified bucket does not exist",
+		mfs.log.Println("Bucket doesn't not exist... attempting to create")
+		if err = mfs.api.MakeBucket(mfs.config.bucket, ""); err != nil {
+			return err
 		}
 	}
 
 	// Set notifications
-	/*
-		mfs.log.Println("Starting monitoring server...")
-		if err = mfs.startNotificationListener(); err != nil {
-			return err
-		}
-	*/
+	// mfs.log.Println("Starting monitoring server...")
+	// if err = mfs.startNotificationListener(); err != nil {
+	//	return err
+	//	}
 
 	if err = mfs.startSync(); err != nil {
 		return err

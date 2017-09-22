@@ -18,9 +18,12 @@
 package minfs
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"mime"
+	"net"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -185,6 +188,30 @@ func (mfs *MinFS) Serve() (err error) {
 	if err != nil {
 		return err
 	}
+
+	var transport http.RoundTripper = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: mfs.config.insecure,
+		},
+		// Set this value so that the underlying transport round-tripper
+		// doesn't try to auto decode the body of objects with
+		// content-encoding set to `gzip`.
+		//
+		// Refer:
+		//    https://golang.org/src/net/http/transport.go?h=roundTrip#L1843
+		DisableCompression: true,
+	}
+
+	mfs.api.SetCustomTransport(transport)
 
 	// Validate if the bucket is valid and accessible.
 	exists, err := mfs.api.BucketExists(mfs.config.bucket)

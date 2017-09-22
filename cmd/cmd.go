@@ -127,7 +127,7 @@ func Main() {
 				}
 			case "gid":
 				if len(vals) == 1 {
-					console.Fatalln("Uid has no value")
+					console.Fatalln("Gid has no value")
 				} else if val, err := strconv.Atoi(vals[1]); err != nil {
 					console.Fatalf("Gid is not a valid value: %s\n", vals[1])
 				} else {
@@ -139,6 +139,8 @@ func Main() {
 				} else {
 					opts = append(opts, minfs.CacheDir(vals[1]))
 				}
+			case "insecure":
+				opts = append(opts, minfs.Insecure())
 			case "debug":
 				opts = append(opts, minfs.Debug())
 			}

@@ -1,4 +1,5 @@
-FROM golang:1.7-wheezy
+ARG ARCH
+FROM ${ARCH}/golang:1.7-wheezy
 
 WORKDIR /go/src/github.com/minio
 

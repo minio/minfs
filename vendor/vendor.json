@@ -69,10 +69,22 @@
 			"revisionTime": "2016-08-18T07:41:28Z"
 		},
 		{
+			"checksumSHA1": "+IH9gXMht4fL/fxKRZ4sqGBps1g=",
+			"path": "github.com/go-ini/ini",
+			"revision": "e7fea39b01aea8d5671f6858f0532f56e8bff3a5",
+			"revisionTime": "2017-03-28T15:39:02Z"
+		},
+		{
 			"checksumSHA1": "XnbEHQRzINRKXKmu9GcaqGkK4Lg=",
 			"path": "github.com/golang/protobuf/proto",
 			"revision": "f592bd283e9ef86337a432eb50e592278c3d534d",
 			"revisionTime": "2016-08-17T17:41:13Z"
+		},
+		{
+			"checksumSHA1": "LJA9zeZ+AZS9LHDacPd9OemVRDk=",
+			"path": "github.com/kardianos/osext",
+			"revision": "efacde03154693404c65e7aa7d461ac9014acd0c",
+			"revisionTime": "2015-03-17T20:29:29Z"
 		},
 		{
 			"checksumSHA1": "7x2UfEAwyq5ouD4/noloWuIR/YI=",
@@ -93,6 +105,12 @@
 			"path": "github.com/minio/cli",
 			"revision": "2e10078e4de1ca37fb1bd62cc79ab87c024b3a1b",
 			"revisionTime": "2016-09-09T03:00:45Z"
+		},
+		{
+			"checksumSHA1": "q8VfSvQ6fZY+QwtlMPtQsJrNews=",
+			"path": "github.com/minio/go-homedir",
+			"revision": "21304a94172ae3a09dee2cd86a12fb6f842138c7",
+			"revisionTime": "2016-02-15T11:55:11Z"
 		},
 		{
 			"checksumSHA1": "CgMkKCG6mu3N6n7GxWhyCWYMQWI=",
@@ -141,6 +159,12 @@
 			"path": "github.com/minio/minio-go/pkg/set",
 			"revision": "7603184e2506faf481a15e7c6620a4d96648aef6",
 			"revisionTime": "2017-09-21T00:53:55Z"
+		},
+		{
+			"checksumSHA1": "I6iYS6n/HCYz9hGYERC8CYr1AVQ=",
+			"path": "github.com/sevlyar/go-daemon",
+			"revision": "298c54b0e0ae32ec2c6674fee8b60d2fefa4ae7e",
+			"revisionTime": "2017-07-31T16:19:21Z"
 		},
 		{
 			"checksumSHA1": "9jjO5GjLa0XF/nfWihF02RoH4qc=",

@@ -3,10 +3,10 @@ PLUGIN_TAG=latest
 PLUGIN_ARCH=amd64 # known namespaces: https://github.com/docker-library/official-images#architectures-other-than-amd64
 
 # Default is to build development plugin.
-all: clean docker rootfs create enable
+all: clean docker rootfs create-edge
 
 # Release is to build release plugin.
-release: clean docker-release rootfs create enable
+release: clean docker-release rootfs create-release
 
 clean:
 	@echo "### rm ./plugin"
@@ -55,16 +55,20 @@ rootfs:
 	@cp config.json ./plugin/
 	@docker rm -vf tmp
 
-create:
-	@echo "### remove existing plugin ${PLUGIN_NAME}:${PLUGIN_TAG} if exists"
-	@docker plugin rm -f ${PLUGIN_NAME}:${PLUGIN_TAG} || true
-	@echo "### create new plugin ${PLUGIN_NAME}:${PLUGIN_TAG} from ./plugin"
-	@docker plugin create ${PLUGIN_NAME}:${PLUGIN_TAG} ./plugin
+create-release:
+	@echo "### remove existing plugin ${PLUGIN_NAME}:latest if exists"
+	@docker plugin rm -f ${PLUGIN_NAME}:latest || true
+	@echo "### create new plugin ${PLUGIN_NAME}:latest from ./plugin"
+	@docker plugin create ${PLUGIN_NAME}:latest ./plugin
+	@echo "### enable plugin ${PLUGIN_NAME}:latest"
+	@docker plugin enable ${PLUGIN_NAME}:latest
 
-enable:
-	@echo "### enable plugin ${PLUGIN_NAME}:${PLUGIN_TAG}"
-	@docker plugin enable ${PLUGIN_NAME}:${PLUGIN_TAG}
+create-edge:
+	@echo "### remove existing plugin ${PLUGIN_NAME}:edge if exists"
+	@docker plugin rm -f ${PLUGIN_NAME}:edge || true
+	@echo "### create new plugin ${PLUGIN_NAME}:edge from ./plugin"
+	@docker plugin create ${PLUGIN_NAME}:edge ./plugin
 
-push:  clean docker rootfs create enable
+push:  clean docker rootfs create
 	@echo "### push plugin ${PLUGIN_NAME}:${PLUGIN_TAG}"
 	@docker plugin push ${PLUGIN_NAME}:${PLUGIN_TAG}

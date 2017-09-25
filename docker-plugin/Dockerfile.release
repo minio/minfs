@@ -1,4 +1,4 @@
-FROM golang:1.7-wheezy
+FROM golang:1.8-stretch
 
 WORKDIR /go/src/github.com/minio
 

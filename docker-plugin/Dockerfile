@@ -1,4 +1,5 @@
-FROM golang:1.8-stretch
+ARG ARCH
+FROM ${ARCH}/golang:1.8-stretch
 
 WORKDIR /go/src/github.com/minio
 

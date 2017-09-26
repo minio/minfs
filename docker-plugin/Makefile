@@ -1,4 +1,6 @@
 PLUGIN_NAME=minio/minfs
+PLUGIN_TAG=latest
+PLUGIN_ARCH=amd64 # known namespaces: https://github.com/docker-library/official-images#architectures-other-than-amd64
 
 # Default is to build development plugin.
 all: clean docker rootfs create-edge
@@ -12,7 +14,7 @@ clean:
 
 docker:
 	@echo "### docker build: builder image"
-	@docker build -q -t builder -f Dockerfile.rootfs .
+	@docker build --build-arg ARCH=${PLUGIN_ARCH} -q -t builder -f Dockerfile.rootfs .
 	@echo "### extract minfs-docker-plugin"
 	@docker create --name tmp builder
 	@docker cp tmp:/go/bin/minfs-docker-plugin .
@@ -31,18 +33,18 @@ docker:
 	@cp -a ../vendor minfs
 	@cp -a ../.git minfs
 	@echo "### docker build: rootfs image with minfs-docker-plugin"
-	@docker build -t ${PLUGIN_NAME}:rootfs .
+	@docker build --build-arg ARCH=${PLUGIN_ARCH} -t ${PLUGIN_NAME}:rootfs .
 
 docker-release:
 	@echo "### docker build: builder image"
-	@docker build -q -t builder -f Dockerfile.rootfs .
+	@docker build --build-arg ARCH=${PLUGIN_ARCH} -q -t builder -f Dockerfile.rootfs .
 	@echo "### extract minfs-docker-plugin"
 	@docker create --name tmp builder
 	@docker cp tmp:/go/bin/minfs-docker-plugin .
 	@docker rm -vf tmp
 	@docker rmi builder
 	@echo "### docker build: rootfs image with minfs-docker-plugin"
-	@docker build -f Dockerfile.release -q -t ${PLUGIN_NAME}:rootfs .
+	@docker build --build-arg ARCH=${PLUGIN_ARCH} -f Dockerfile.release -q -t ${PLUGIN_NAME}:rootfs .
 
 rootfs:
 	@echo "### create rootfs directory in ./plugin/rootfs"

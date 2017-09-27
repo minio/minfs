@@ -40,6 +40,7 @@ type Config struct {
 	secretToken string
 	target      *url.URL
 	mountpoint  string
+	insecure    bool
 	debug       bool
 
 	uid  uint32
@@ -153,7 +154,14 @@ func SetUID(uid uint32) func(*Config) {
 	}
 }
 
-// Debug - enables debugging.
+// Insecure - enable insecure mode.
+func Insecure() func(*Config) {
+	return func(cfg *Config) {
+		cfg.insecure = true
+	}
+}
+
+// Debug - enables debug logging.
 func Debug() func(*Config) {
 	return func(cfg *Config) {
 		cfg.debug = true

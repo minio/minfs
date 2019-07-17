@@ -1,5 +1,5 @@
 /*
-* Minio Cloud Storage, (C) 2017 Minio, Inc.
+* MinIO Cloud Storage, (C) 2017 MinIO, Inc.
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ const (
 	defaultLocation = "us-east-1"
 )
 
-// `serverconfig` struct is used to store configuration values of the remote Minio server.
+// `serverconfig` struct is used to store configuration values of the remote MinIO server.
 // Minfs uses this info to the mount the remote bucket.
 // The server info (endpoint, accessKey and secret Key) is passed during creating a docker volume.
 // Here is how to do it,
@@ -50,19 +50,19 @@ const (
 //     -o endpoint=https://play.minio.io:9000 -o access-key=Q3AM3UQ867SPQQA43P2F\
 //     -o secret-key=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG -o bucket=test-bucket
 type serverConfig struct {
-	// Endpoint of the remote Minio server.
+	// Endpoint of the remote MinIO server.
 	endpoint string
 	// `minfs` mounts the remote bucket to a the local `mountpoint`.
 	bucket string
 	// accessKey of the remote minio server.
 	accessKey string
-	// secretKey of the remote Minio server.
+	// secretKey of the remote MinIO server.
 	secretKey string
 	// Additional opts like custom uid,gid etc.
 	opts string
 }
 
-// Represents an instance of `minfs` mount of remote Minio bucket.
+// Represents an instance of `minfs` mount of remote MinIO bucket.
 // Its defined by
 //   - The server info of the mount.
 //   - The local mountpoint.
@@ -93,12 +93,12 @@ type minfsDriver struct {
 	// used for atomic access to the fields.
 	sync.RWMutex
 	mountRoot string
-	// config of the remote Minio server.
+	// config of the remote MinIO server.
 	config serverConfig
-	// the local path to which the remote Minio bucket is mounted to.
+	// the local path to which the remote MinIO bucket is mounted to.
 
 	// An active volume driver server can be used to mount multiple
-	// remote buckets possibly even referring to different Minio server
+	// remote buckets possibly even referring to different MinIO server
 	// instances or buckets.
 	// The state info of these mounts are maintained here.
 	mounts map[string]*mountInfo
@@ -143,7 +143,7 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 	// if the volume is already created verify that the server configs match.
 	// If not return with error.
 	// Since the plugin system identifies a mount uniquely by its name,
-	// its not possible to create a duplicate volume pointing to a different Minio server or bucket.
+	// its not possible to create a duplicate volume pointing to a different MinIO server or bucket.
 	if mntInfo, ok := d.mounts[r.Name]; ok {
 		// Since the volume by the given name already exists,
 		// match to see whether the endpoint, bucket, accessKey
@@ -199,11 +199,11 @@ func (d *minfsDriver) Create(r volume.Request) volume.Response {
 	}
 
 	// Verify if the bucket exists.
-	// If it doesnt exist create the bucket on the remote Minio server.
+	// If it doesnt exist create the bucket on the remote MinIO server.
 	// Initialize minio client object.
 	minioClient, err := minio.New(minioHost, config.accessKey, config.secretKey, enableSSL)
 	if err != nil {
-		logrus.Errorf("Error creating new Minio client. <Error> %s", err.Error())
+		logrus.Errorf("Error creating new MinIO client. <Error> %s", err.Error())
 		return errorResponse(err.Error())
 	}
 
@@ -366,7 +366,7 @@ func (d *minfsDriver) Mount(r volume.MountRequest) volume.Response {
 	// set access-key and secret-key as env variables.
 	os.Setenv("MINFS_ACCESS_KEY", v.config.accessKey)
 	os.Setenv("MINFS_SECRET_KEY", v.config.secretKey)
-	// Mount the remote Minio bucket to the local mountpoint.
+	// Mount the remote MinIO bucket to the local mountpoint.
 
 	if err := d.mountVolume(*v); err != nil {
 		logrus.WithFields(logrus.Fields{
@@ -500,7 +500,7 @@ func (d *minfsDriver) unmountVolume(target string) error {
 func main() {
 	// --mountroot flag defines the root folder where are the volumes are mounted.
 	// If the option is not specified '/mnt' is taken as default mount root.
-	mountRoot := flag.String("mountroot", "/mnt", "root for mounting Minio buckets.")
+	mountRoot := flag.String("mountroot", "/mnt", "root for mounting MinIO buckets.")
 	flag.Parse()
 
 	// check if the mount root exists.

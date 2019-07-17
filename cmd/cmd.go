@@ -1,5 +1,5 @@
 /*
- * MinFS - fuse driver for Object Storage (C) 2016 Minio, Inc.
+ * MinFS - fuse driver for Object Storage (C) 2016 MinIO, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,16 +28,7 @@ import (
 
 var (
 	// global flags for minfs.
-	minfsFlags = []cli.Flag{
-		cli.BoolFlag{
-			Name:  "help, h",
-			Usage: "Show help.",
-		},
-		cli.BoolFlag{
-			Name:  "version, V",
-			Usage: "Show version.",
-		},
-	}
+	minfsFlags = []cli.Flag{}
 )
 
 // Collection of minio flags currently supported.
@@ -57,10 +48,10 @@ DESCRIPTION:
 
 USAGE:
   {{.Name}} {{if .Flags}}[flags] {{end}}command{{if .Flags}}{{end}} [arguments...]
-
+{{if .Commands}}
 COMMANDS:
   {{range .Commands}}{{join .Names ", "}}{{ "\t" }}{{.Usage}}
-  {{end}}{{if .Flags}}
+  {{end}}{{end}}{{if .Flags}}
 FLAGS:
   {{range .Flags}}{{.}}
   {{end}}{{end}}
@@ -94,12 +85,18 @@ func Main() {
 	// -- uid / gid
 
 	// Set up app.
+	cli.HelpFlag = cli.BoolFlag{
+		Name:  "help, h",
+		Usage: "show help",
+	}
+
 	app := cli.NewApp()
+	app.HideHelpCommand = true
 	app.Name = "minfs"
-	app.Author = "Minio.io"
+	app.Author = "min.io"
 	app.Version = Version
 	app.Usage = "Fuse driver for Cloud Storage Server."
-	app.Description = `MinFS is a fuse driver for Amazon S3 compatible object storage server. Use it to store photos, videos, VMs, containers, log files, or any blob of data as objects on your object storage server.`
+	app.Description = `MinFS is a fuse driver for MinIO server.`
 	app.Flags = append(minfsFlags, globalFlags...)
 	app.CustomAppHelpTemplate = minfsHelpTemplate
 	app.Before = func(c *cli.Context) error {
@@ -153,12 +150,12 @@ func Main() {
 
 		fs, err := minfs.New(opts...)
 		if err != nil {
-			console.Fatalln("Unable to instantiate a new minfs", err)
+			console.Fatalln("Unable to initialize minfs", err)
 		}
 
 		err = fs.Serve()
 		if err != nil {
-			console.Fatalln("Unable to serve a minfs", err)
+			console.Fatalln("Unable to serve minfs", err)
 		}
 	}
 

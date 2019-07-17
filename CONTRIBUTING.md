@@ -3,7 +3,7 @@
 If you do not have a working Golang environment setup please follow [Golang Installation Guide](https://docs.minio.io/docs/how-to-install-golang).
 
 ### Setup your Minfs Github Repository
-Fork [Minio upstream](https://github.com/minio/minfs/fork) source repository to your own personal repository. Copy the URL for minio from your personal github repo (you will need it for the `git clone` command below).
+Fork [MinIO upstream](https://github.com/minio/minfs/fork) source repository to your own personal repository. Copy the URL for minio from your personal github repo (you will need it for the `git clone` command below).
 ```sh
 $ mkdir -p $GOPATH/src/github.com/minio
 $ cd $GOPATH/src/github.com/minio
@@ -11,14 +11,14 @@ $ git clone <paste saved URL for personal forked minio repo>
 $ cd minfs
 ```
 
-### Compiling Minio from source
-Minio uses ``Makefile`` to wrap around some of redundant checks done through command line.
+### Compiling MinIO from source
+MinIO uses ``Makefile`` to wrap around some of redundant checks done through command line.
 
 ```sh
 $ make
 Checking if proper environment variables are set.. Done
 ...
-Checking dependencies for Minio.. Done
+Checking dependencies for MinIO.. Done
 Installed govet
 Building Libraries
 ...
@@ -36,14 +36,14 @@ $ git merge upstream/master
 $ make
 Checking if proper environment variables are set.. Done
 ...
-Checking dependencies for Minio.. Done
+Checking dependencies for MinIO.. Done
 Installed govet
 Building Libraries
 ...
 ```
 
 ###  Developer Guidelines
-``Minio`` community welcomes your contribution. To make the process as seamless as possible, we ask for the following:
+``MinIO`` community welcomes your contribution. To make the process as seamless as possible, we ask for the following:
 * Go ahead and fork the project and make your changes. We encourage pull requests to discuss code changes.
     - Fork it
     - Create your feature branch (git checkout -b my-new-feature)
@@ -51,12 +51,12 @@ Building Libraries
     - Push to the branch (git push origin my-new-feature)
     - Create new Pull Request
 
-* If you have additional dependencies for ``Minio``, ``Minio`` manages its dependencies using [govendor](https://github.com/kardianos/govendor)
+* If you have additional dependencies for ``MinIO``, ``MinIO`` manages its dependencies using [govendor](https://github.com/kardianos/govendor)
     - Run `go get foo/bar`
     - Edit your code to import foo/bar
     - Run `make pkg-add PKG=foo/bar` from top-level directory
 
-* If you have dependencies for ``Minio`` which needs to be removed
+* If you have dependencies for ``MinIO`` which needs to be removed
     - Edit your code to not import foo/bar
     - Run `make pkg-remove PKG=foo/bar` from top-level directory
 
@@ -67,5 +67,5 @@ Building Libraries
     - Make sure `go test -race ./...` and `go build` completes.
 
 * Read [Effective Go](https://github.com/golang/go/wiki/CodeReviewComments) article from Golang project
-    - `Minio` project is fully conformant with Golang style
+    - `MinIO` project is fully conformant with Golang style
     - if you happen to observe offending code, please feel free to send a pull request

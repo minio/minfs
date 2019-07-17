@@ -1,5 +1,5 @@
 /*
-* Minio Cloud Storage, (C) 2017 Minio, Inc.
+* MinIO Cloud Storage, (C) 2017 MinIO, Inc.
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -58,7 +58,7 @@ func getScheme(endpoint string) (string, error) {
 	return u.Scheme, nil
 }
 
-// If the requested volume alredy exists, then its necessary that the server configs (Minio server endpoint,
+// If the requested volume alredy exists, then its necessary that the server configs (MinIO server endpoint,
 // bucket,accessKey and secretKey matches with the existing one.
 // Since a mount is uniquely identified by its volume name its not possible to have a duplicate entry.
 func matchServerConfig(config serverConfig, r volume.Request) error {

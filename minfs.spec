@@ -11,7 +11,7 @@ Summary:          MinFS is a fuse driver for S3 compatible object storage.
 Name:             minfs
 Version:          0.0.%{subver}
 Release:          1
-Vendor:           Minio, Inc.
+Vendor:           MinIO, Inc.
 Group:            Applications/File
 License:          Apache v2.0
 Source0:	  https://github.com/minio/minfs/archive/%{tag}.tar.gz

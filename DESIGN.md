@@ -1,7 +1,7 @@
 Introduction [![Slack](https://slack.minio.io/slack?type=svg)](https://slack.minio.io)
 ------------
 
-This fuse driver allows Minio bucket or any bucket on S3 compatible storage to be mounted as a local, as a prerequesite you need [fusermount](http://man7.org/linux/man-pages/man1/fusermount3.1.html). This feature allows Minio to serve a bucket over a minimal POSIX API.
+This fuse driver allows MinIO bucket or any bucket on S3 compatible storage to be mounted as a local, as a prerequesite you need [fusermount](http://man7.org/linux/man-pages/man1/fusermount3.1.html). This feature allows MinIO to serve a bucket over a minimal POSIX API.
 
 Limitations
 ----------
@@ -30,7 +30,7 @@ FUSE options
 
 ### Work in Progress.
 
-- Use Minio notifications to actively update metadata.
+- Use MinIO notifications to actively update metadata.
 - One mountpoint per bucket.
 - Each mountpoint will have its own cache folders and can be mounted to one bucket.
 - Renaming directories will cause an error when directly accessing the newly moved folder.

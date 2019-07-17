@@ -36,7 +36,7 @@ volumes:
 ```
 
 <blockquote>
-Please change the `endpoint`, `access-key`, `secret-key` and `bucket` for your local Minio setup.
+Please change the `endpoint`, `access-key`, `secret-key` and `bucket` for your local MinIO setup.
 </blockquote>
 
 Once you have successfully created `docker-compose.yml` configuration in your current working directory.
@@ -61,7 +61,7 @@ docker volume create -d minio/minfs \
 ```
 
 <blockquote>
-Please change the `endpoint`, `access-key`, `secret-key` and `bucket` for your local Minio setup.
+Please change the `endpoint`, `access-key`, `secret-key` and `bucket` for your local MinIO setup.
 </blockquote>
 
 Once you have successfully created the volume, start a new container with `my-test-store` attached.

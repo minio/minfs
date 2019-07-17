@@ -18,6 +18,8 @@
 package cmd
 
 import (
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -64,7 +66,7 @@ COMMITID:
 	`{{ "\n"}}`
 
 // Main is the actual run function
-func Main() {
+func Main(args []string) {
 	// Enable profiling supported modes are [cpu, mem, block].
 	/*
 		switch os.Getenv("MINFS_PROFILER") {
@@ -102,40 +104,41 @@ func Main() {
 	app.Before = func(c *cli.Context) error {
 		_, err := minfs.InitMinFSConfig()
 		if err != nil {
-			console.Fatalln("Unable to initialize minfs config", err)
+			return fmt.Errorf("Unable to initialize minfs config %s", err)
 		}
 		if !c.Args().Present() {
 			cli.ShowAppHelpAndExit(c, 1)
 		}
 		return nil
 	}
-	app.Action = func(c *cli.Context) {
+	app.Action = func(c *cli.Context) error {
 		opts := []func(*minfs.Config){}
 		for _, option := range strings.Split(c.String("o"), ",") {
 			vals := strings.Split(option, "=")
 			switch vals[0] {
 			case "uid":
 				if len(vals) == 1 {
-					console.Fatalln("Uid has no value")
-				} else if val, err := strconv.Atoi(vals[1]); err != nil {
-					console.Fatalf("Uid is not a valid value: %s\n", vals[1])
-				} else {
-					opts = append(opts, minfs.SetUID(uint32(val)))
+					return errors.New("Uid has no value")
 				}
+				val, err := strconv.Atoi(vals[1])
+				if err != nil {
+					return fmt.Errorf("Uid is not a valid value: %s", vals[1])
+				}
+				opts = append(opts, minfs.SetUID(uint32(val)))
 			case "gid":
 				if len(vals) == 1 {
-					console.Fatalln("Gid has no value")
-				} else if val, err := strconv.Atoi(vals[1]); err != nil {
-					console.Fatalf("Gid is not a valid value: %s\n", vals[1])
-				} else {
-					opts = append(opts, minfs.SetGID(uint32(val)))
+					return errors.New("Gid has no value")
 				}
+				val, err := strconv.Atoi(vals[1])
+				if err != nil {
+					return fmt.Errorf("Gid is not a valid value: %s", vals[1])
+				}
+				opts = append(opts, minfs.SetGID(uint32(val)))
 			case "cache":
 				if len(vals) == 1 {
-					console.Fatalln("Cache has no value")
-				} else {
-					opts = append(opts, minfs.CacheDir(vals[1]))
+					return errors.New("Cache has no value")
 				}
+				opts = append(opts, minfs.CacheDir(vals[1]))
 			case "insecure":
 				opts = append(opts, minfs.Insecure())
 			case "debug":
@@ -150,16 +153,19 @@ func Main() {
 
 		fs, err := minfs.New(opts...)
 		if err != nil {
-			console.Fatalln("Unable to initialize minfs", err)
+			return fmt.Errorf("Unable to initialize minfs %s", err)
 		}
 
 		err = fs.Serve()
 		if err != nil {
-			console.Fatalln("Unable to serve minfs", err)
+			return fmt.Errorf("Unable to serve minfs %s", err)
 		}
+
+		return nil
 	}
 
 	// Run the app - exit on error.
-	app.RunAndExitOnError()
-
+	if err := app.Run(args); err != nil {
+		console.Fatalln(err)
+	}
 }

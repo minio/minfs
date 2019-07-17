@@ -47,5 +47,5 @@ func main() {
 	defer dctx.Release()
 
 	// daemon business logic starts here
-	minfs.Main()
+	minfs.Main(os.Args)
 }

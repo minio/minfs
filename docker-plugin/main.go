@@ -26,9 +26,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/docker/go-plugins-helpers/volume"
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v6"
+	"github.com/sirupsen/logrus"
 )
 
 // Used for Plugin discovery.

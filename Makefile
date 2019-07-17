@@ -1,91 +1,88 @@
+PWD := $(shell pwd)
+GOPATH := $(shell go env GOPATH)
 LDFLAGS := $(shell go run buildscripts/gen-ldflags.go)
-DIRS := *.go fs/**.go cmd/**.go meta/**.go
 
-all: gomake-all
-
-checks:
-	@echo "Checking deps:"
-	@(env bash buildscripts/checkdeps.sh)
-	@(env bash buildscripts/checkgopath.sh)
-
-getdeps: checks
-	@go get github.com/golang/lint/golint && echo "Installed golint:"
-	@go get github.com/fzipp/gocyclo && echo "Installed gocyclo:"
-	@go get github.com/remyoudompheng/go-misc/deadcode && echo "Installed deadcode:"
-	@go get github.com/client9/misspell/cmd/misspell && echo "Installed misspell:"
-
-# verifiers: getdeps vet fmt lint cyclo deadcode
-verifiers: vet lint cyclo deadcode spelling # todo
-
-todo:
-	@echo "Running $@:"
-	@$(foreach DIR, $(DIRS), fgrep -i todo $(DIR)||true;)
-
-vet:
-	@echo "Running $@:"
-	@$(foreach DIR, $(DIRS), go tool vet -all $(DIR);)
-	@$(foreach DIR, $(DIRS), go tool vet -shadow=true $(DIR);)
-
-spelling:
-	@$(foreach DIR, $(DIRS), ${GOPATH}/bin/misspell $(DIR);)
-
-lint:
-	@echo "Running $@:"
-	@$(foreach DIR, $(DIRS), $(GOPATH)/bin/golint $(DIR);)
-
-cyclo:
-	@echo "Running $@:"
-	@$(foreach DIR, $(DIRS), $(GOPATH)/bin/gocyclo -over 40 $(DIR);)
-
-deadcode:
-	@echo "Running $@:"
-	@$(GOPATH)/bin/deadcode
-
-build: getdeps verifiers
-
-test: getdeps verifiers
-	@echo "Running all testing:"
-	@$(foreach DIR, $(DIRS), go test $(GOFLAGS) $(DIR);)
-
-gomake-all: build
-	@echo "Installing minfs:"
-	@go build --ldflags "$(LDFLAGS)" github.com/minio/minfs
-
-coverage: getdeps verifiers
-	@echo "Running all coverage:"
-	@./buildscripts/go-coverage.sh
-
-pkg-validate-arg-%: ;
-ifndef PKG
-	$(error Usage: make $(@:pkg-validate-arg-%=pkg-%) PKG=pkg_name)
+GOOS := $(shell go env GOOS)
+GOOSALT ?= 'linux'
+ifeq ($(GOOS),'darwin')
+  GOOSALT = 'mac'
 endif
 
-pkg-add: pkg-validate-arg-add
-	@$(GOPATH)/bin/govendor add $(PKG)
 
-pkg-update: pkg-validate-arg-update
-	@$(GOPATH)/bin/govendor update $(PKG)
+BUILD_LDFLAGS := '$(LDFLAGS)'
 
-pkg-remove: pkg-validate-arg-remove
-	@$(GOPATH)/bin/govendor remove $(PKG)
+all: build
 
-pkg-list:
-	@$(GOPATH)/bin/govendor list
+checks:
+	@echo "Checking dependencies"
+	@(env bash $(PWD)/buildscripts/checkdeps.sh)
 
-install: gomake-all
-	@sudo /usr/bin/install -m 755 minfs /sbin/minfs && echo "Installing minfs"
-	@sudo /usr/bin/install -m 755 mount.minfs /sbin/mount.minfs && echo "Installing mount.minfs"
-	@sudo /usr/bin/install -m 644 docs/minfs.8 /usr/share/man/man8/minfs.8 && echo "Installing minfs.8"
-	@sudo /usr/bin/install -m 644 docs/mount.minfs.8 /usr/share/man/man8/mount.minfs.8 && echo "Installing mount.minfs.8"
+getdeps:
+	@mkdir -p ${GOPATH}/bin
+	@which golint 1>/dev/null || (echo "Installing golint" && go get -u golang.org/x/lint/golint)
+	@which staticcheck 1>/dev/null || (echo "Installing staticcheck" && wget --quiet -O ${GOPATH}/bin/staticcheck https://github.com/dominikh/go-tools/releases/download/2019.1/staticcheck_linux_amd64 && chmod +x ${GOPATH}/bin/staticcheck)
+	@which misspell 1>/dev/null || (echo "Installing misspell" && wget --quiet https://github.com/client9/misspell/releases/download/v0.3.4/misspell_0.3.4_${GOOSALT}_64bit.tar.gz && tar xf misspell_0.3.4_${GOOSALT}_64bit.tar.gz && mv misspell ${GOPATH}/bin/misspell && chmod +x ${GOPATH}/bin/misspell && rm -f misspell_0.3.4_${GOOSALT}_64bit.tar.gz)
 
-release: verifiers
-	@MINFS_RELEASE=RELEASE ./buildscripts/build.sh
+crosscompile:
+	@(env bash $(PWD)/buildscripts/cross-compile.sh)
 
-experimental: verifiers
-	@MINFS_RELEASE=EXPERIMENTAL ./buildscripts/build.sh
+verifiers: getdeps vet fmt lint staticcheck spelling
+
+vet:
+	@echo "Running $@"
+	@GO111MODULE=on go vet github.com/minio/minfs/...
+
+fmt:
+	@echo "Running $@"
+	@GO111MODULE=on gofmt -d cmd/
+	@GO111MODULE=on gofmt -d fs/
+	@GO111MODULE=on gofmt -d meta/
+
+lint:
+	@echo "Running $@"
+	@GO111MODULE=on ${GOPATH}/bin/golint -set_exit_status github.com/minio/minfs/cmd/...
+	@GO111MODULE=on ${GOPATH}/bin/golint -set_exit_status github.com/minio/minfs/fs/...
+	@GO111MODULE=on ${GOPATH}/bin/golint -set_exit_status github.com/minio/minfs/meta/...
+
+staticcheck:
+	@echo "Running $@"
+        @GO111MODULE=on ${GOPATH}/bin/staticcheck github.com/minio/minfs/cmd/...
+        @GO111MODULE=on ${GOPATH}/bin/staticcheck github.com/minio/minfs/fs/...
+        @GO111MODULE=on ${GOPATH}/bin/staticcheck github.com/minio/minfs/meta/...
+
+spelling:
+        @GO111MODULE=on ${GOPATH}/bin/misspell -locale US -error `find cmd/`
+        @GO111MODULE=on ${GOPATH}/bin/misspell -locale US -error `find fs/`
+        @GO111MODULE=on ${GOPATH}/bin/misspell -locale US -error `find meta/`
+        @GO111MODULE=on ${GOPATH}/bin/misspell -locale US -error `find docs/`
+
+test: verifiers build
+	@echo "Running unit tests"
+	@GO111MODULE=on CGO_ENABLED=0 go test -tags kqueue ./... 1>/dev/null
+
+coverage: build
+	@echo "Running all coverage for MinIO"
+	@(env bash $(PWD)/buildscripts/go-coverage.sh)
+
+# Builds mc locally.
+build: checks
+	@echo "Building minfs binary to './minfs'"
+	@GO111MODULE=on GO_FLAGS="" CGO_ENABLED=0 go build -tags kqueue --ldflags $(BUILD_LDFLAGS) -o $(PWD)/minfs
+
+# Builds MinFS and installs it to $GOPATH/bin.
+install: build
+	@sudo /usr/bin/install -m 755 minfs /sbin/minfs && echo "Installing minfs binary to '/sbin/minfs'"
+	@sudo /usr/bin/install -m 755 mount.minfs /sbin/mount.minfs && echo "Installing '/sbin/mount.minfs'"
+	@echo "Installing man pages"
+	@sudo /usr/bin/install -m 644 docs/minfs.8 /usr/share/man/man8/minfs.8
+	@sudo /usr/bin/install -m 644 docs/mount.minfs.8 /usr/share/man/man8/mount.minfs.8
+	@echo "Installation successful. To learn more, try \"minfs --help\"."
 
 clean:
-	@rm -f cover.out
-	@rm -f minfs
+	@echo "Cleaning up all the generated files"
 	@find . -name '*.test' | xargs rm -fv
-	@rm -fr release
+	@find . -name '*~' | xargs rm -fv
+	@rm -rvf minfs
+	@rm -rvf build
+	@rm -rvf release
+

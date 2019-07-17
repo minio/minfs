@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# MinFS is a fuse driver, (C) 2014-2016 Minio, Inc.
+# MinIO Client, (C) 2015, 2016, 2017, 2018, 2019 MinIO, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,20 +15,35 @@
 # limitations under the License.
 #
 
+# shellcheck source=buildscripts/build.env
+. "$(pwd)/buildscripts/build.env"
+
 _init() {
 
     shopt -s extglob
 
     ## Minimum required versions for build dependencies
     GIT_VERSION="1.0"
-    GO_VERSION="1.7"
+    GO_VERSION="1.12"
     OSX_VERSION="10.8"
-    UNAME=$(uname -sm)
-
-    ## Check all dependencies are present
-    MISSING=""
+    KNAME=$(uname -s)
+    ARCH=$(uname -m)
+    case "${KNAME}" in
+        SunOS )
+            ARCH=$(isainfo -k)
+            ;;
+    esac
 }
 
+## FIXME:
+## In OSX, 'readlink -f' option does not exist, hence
+## we have our own readlink -f behavior here.
+## Once OSX has the option, below function is good enough.
+##
+## readlink() {
+##     return /bin/readlink -f "$1"
+## }
+##
 readlink() {
     TARGET_FILE=$1
 
@@ -50,152 +65,70 @@ readlink() {
     echo $RESULT
 }
 
-###
-#
-# Takes two arguments
-# arg1: version number in `x.x.x` format
-# arg2: version number in `x.x.x` format
-#
-# example: check_version "$version1" "$version2"
-#
-# returns:
-# 0 - Installed version is equal to required
-# 1 - Installed version is greater than required
-# 2 - Installed version is lesser than required
-# 3 - If args have length zero
-#
-####
-check_version() {
-    ## validate args
-    [[ -z "$1" ]] && return 3
-    [[ -z "$2" ]] && return 3
-
-    if [[ $1 == $2 ]]; then
-        return 0
-    fi
-
-    local IFS=.
-    local i ver1=($1) ver2=($2)
-    # fill empty fields in ver1 with zeros
-    for ((i=${#ver1[@]}; i<${#ver2[@]}; i++)); do
-        ver1[i]=0
-    done
-    for ((i=0; i<${#ver1[@]}; i++)); do
-        if [[ -z ${ver2[i]} ]]; then
-            # fill empty fields in ver2 with zeros
-            ver2[i]=0
-        fi
-        if ((10#${ver1[i]} > 10#${ver2[i]})); then
-
-            return 1
-        fi
-        if ((10#${ver1[i]} < 10#${ver2[i]})); then
-            ## Installed version is lesser than required - Bad condition
-            return 2
-        fi
-    done
-    return 0
+assert_is_supported_arch() {
+    case "${ARCH}" in
+        x86_64 | amd64 | ppc64le | aarch64 | arm* | s390x )
+            return
+            ;;
+        *)
+            echo "Arch '${ARCH}' is not supported. Supported Arch: [x86_64, amd64, ppc64le, aarch64, arm*, s390x]"
+            exit 1
+    esac
 }
 
-check_golang_env() {
-    echo ${GOPATH:?} 2>&1 >/dev/null
-    if [ $? -eq 1 ]; then
-        echo "ERROR"
-        echo "GOPATH environment variable missing, please refer to Go installation document"
-        echo "https://github.com/minio/minfs/blob/master/INSTALLGO.md#install-go-13"
+assert_is_supported_os() {
+    case "${KNAME}" in
+        Linux | FreeBSD | OpenBSD | NetBSD | DragonFly | SunOS )
+            return
+            ;;
+        Darwin )
+            osx_host_version=$(env sw_vers -productVersion)
+            if ! check_minimum_version "${OSX_VERSION}" "${osx_host_version}"; then
+                echo "OSX version '${osx_host_version}' is not supported. Minimum supported version: ${OSX_VERSION}"
+                exit 1
+            fi
+            return
+            ;;
+        *)
+            echo "OS '${KNAME}' is not supported. Supported OS: [Linux, FreeBSD, OpenBSD, NetBSD, Darwin, DragonFly]"
+            exit 1
+    esac
+}
+
+assert_check_golang_env() {
+    if ! which go >/dev/null 2>&1; then
+        echo "Cannot find go binary in your PATH configuration, please refer to Go installation document at https://docs.min.io/docs/how-to-install-golang"
         exit 1
     fi
 
-    local go_binary_path=$(which go)
-    if [ -z "${go_binary_path}" ] ; then
-        echo "Cannot find go binary in your PATH configuration, please refer to Go installation document"
-        echo "https://github.com/minio/minfs/blob/master/INSTALLGO.md#install-go-13"
-        exit -1
+    installed_go_version=$(go version | sed 's/^.* go\([0-9.]*\).*$/\1/')
+    if ! check_minimum_version "${GO_VERSION}" "${installed_go_version}"; then
+        echo "Go runtime version '${installed_go_version}' is unsupported. Minimum supported version: ${GO_VERSION} to compile."
+        exit 1
     fi
 }
 
-is_supported_os() {
-    case ${UNAME%% *} in
-        "Linux")
-            os="linux"
-            ;;
-        "FreeBSD")
-            os="freebsd"
-            ;;
-        "Darwin")
-            osx_host_version=$(env sw_vers -productVersion)
-            check_version "${osx_host_version}" "${OSX_VERSION}"
-            [[ $? -ge 2 ]] && die "Minimum OSX version supported is ${OSX_VERSION}"
-            ;;
-        "*")
-            echo "Exiting.. unsupported operating system found"
-            exit 1;
-    esac
-}
-
-is_supported_arch() {
-    local supported
-    case ${UNAME##* } in
-        "x86_64" | "amd64")
-            supported=1
-            ;;
-        "arm"*)
-            supported=1
-            ;;
-        *)
-            supported=0
-            ;;
-    esac
-    if [ $supported -eq 0 ]; then
-        echo "Invalid arch: ${UNAME} not supported, please use x86_64/amd64"
-        exit 1;
-    fi
-}
-
-check_deps() {
-    go_version=$(env go version 2>/dev/null)
-    check_version "$(echo ${go_version} | sed 's/^.* go\([0-9.]*\).*$/\1/')" "${GO_VERSION}"
-    if [ $? -ge 2 ]; then
-        MISSING="${MISSING} golang(${GO_VERSION})"
-    fi
-
-    check_version "$(env git --version 2>/dev/null | sed -e 's/^.* \([0-9.\].*\).*$/\1/' -e 's/^\([0-9.\]*\).*/\1/g')" "${GIT_VERSION}"
-    if [ $? -ge 2 ]; then
-        MISSING="${MISSING} git"
+assert_check_deps() {
+    # support unusual Git versions such as: 2.7.4 (Apple Git-66)
+    installed_git_version=$(git version | perl -ne '$_ =~ m/git version (.*?)( |$)/; print "$1\n";')
+    if ! check_minimum_version "${GIT_VERSION}" "${installed_git_version}"; then
+        echo "Git version '${installed_git_version}' is not supported. Minimum supported version: ${GIT_VERSION}"
+        exit 1
     fi
 }
 
 main() {
-    echo -n "Check for supported arch.. "
-    is_supported_arch
+    ## Check for supported arch
+    assert_is_supported_arch
 
-    echo -n "Check for supported os.. "
-    is_supported_os
+    ## Check for supported os
+    assert_is_supported_os
 
-    echo -n "Checking if proper environment variables are set.. "
-    check_golang_env
+    ## Check for Go environment
+    assert_check_golang_env
 
-    echo "Done"
-    echo "Using GOPATH=${GOPATH}"
-
-    echo -n "Checking dependencies for Minio.. "
-    check_deps
-
-    ## If dependencies are missing, warn the user and abort
-    if [ "x${MISSING}" != "x" ]; then
-        echo "ERROR"
-        echo
-        echo "The following build tools are missing:"
-        echo
-        echo "** ${MISSING} **"
-        echo
-        echo "Please install them "
-        echo "${MISSING}"
-        echo
-        echo "Follow https://docs.minio.io/docs/how-to-install-golang for further instructions"
-        exit 1
-    fi
-    echo "Done"
+    ## Check for dependencies
+    assert_check_deps
 }
 
 _init && main "$@"

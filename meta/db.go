@@ -35,12 +35,12 @@ func RegisterExt(id int8, value interface{}) interface{} {
 }
 
 // Open -
-func Open(path string, mode os.FileMode, options *bolt.Options) (*DB, error) {
+func Open(path string, mode os.FileMode, options *bbolt.Options) (*DB, error) {
 	dname := filepath.Dir(path)
 	if err := os.MkdirAll(dname, 0700); err != nil {
 		return nil, err
 	}
-	db, err := bolt.Open(path, 0600, nil)
+	db, err := bbolt.Open(path, 0600, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func Open(path string, mode os.FileMode, options *bolt.Options) (*DB, error) {
 
 // DB -
 type DB struct {
-	*bolt.DB
+	*bbolt.DB
 }
 
 // Begin -
@@ -64,21 +64,21 @@ func (db *DB) Begin(writable bool) (*Tx, error) {
 
 // Update -
 func (db *DB) Update(fn func(*Tx) error) error {
-	return db.DB.Update(func(tx *bolt.Tx) error {
+	return db.DB.Update(func(tx *bbolt.Tx) error {
 		return fn(&Tx{tx})
 	})
 }
 
 // View -
 func (db *DB) View(fn func(*Tx) error) error {
-	return db.DB.View(func(tx *bolt.Tx) error {
+	return db.DB.View(func(tx *bbolt.Tx) error {
 		return fn(&Tx{tx})
 	})
 }
 
 // Bucket -
 type Bucket struct {
-	InnerBucket *bolt.Bucket
+	InnerBucket *bbolt.Bucket
 }
 
 // Bucket -
@@ -117,7 +117,7 @@ func (b *Bucket) CreateBucketIfNotExists(key string) (*Bucket, error) {
 
 // Tx - transaction struct.
 type Tx struct {
-	*bolt.Tx
+	*bbolt.Tx
 }
 
 // Bucket -

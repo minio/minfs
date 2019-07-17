@@ -26,6 +26,7 @@ import (
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
 	"github.com/minio/minfs/meta"
+	minio "github.com/minio/minio-go/v6"
 	"golang.org/x/net/context"
 )
 
@@ -154,7 +155,7 @@ func (f *File) cacheSave(path string, req *fuse.OpenRequest) error {
 		return nil
 	}
 
-	object, err := f.mfs.api.GetObject(f.mfs.config.bucket, f.RemotePath())
+	object, err := f.mfs.api.GetObject(f.mfs.config.bucket, f.RemotePath(), minio.GetObjectOptions{})
 	if err != nil {
 		if meta.IsNoSuchObject(err) {
 			return fuse.ENOENT

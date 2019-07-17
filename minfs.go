@@ -1,3 +1,5 @@
+// +build go1.12
+
 /*
  * MinFS - fuse driver for Object Storage (C) 2016, 2017 Minio, Inc.
  *

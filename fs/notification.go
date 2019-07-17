@@ -22,7 +22,7 @@ import (
 	"path"
 	"strings"
 
-	minio "github.com/minio/minio-go"
+	minio "github.com/minio/minio-go/v6"
 )
 
 func (mfs *MinFS) startNotificationListener() error {

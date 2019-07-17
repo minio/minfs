@@ -34,8 +34,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/minio/minfs/meta"
-	"github.com/minio/minio-go"
-	"github.com/minio/minio-go/pkg/credentials"
+	"github.com/minio/minio-go/v6"
+	"github.com/minio/minio-go/v6/pkg/credentials"
 
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
@@ -296,7 +296,7 @@ func (mfs *MinFS) putOp(req *PutOperation) {
 	}
 	defer r.Close()
 
-	ops := &minio.PutObjectOptions{
+	ops := minio.PutObjectOptions{
 		ContentType: mime.TypeByExtension(filepath.Ext(req.Target)),
 	}
 	_, err = mfs.api.PutObject(mfs.config.bucket, req.Target, r, req.Length, ops)

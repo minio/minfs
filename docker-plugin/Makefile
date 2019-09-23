@@ -30,10 +30,9 @@ docker:
 	@cp -a ../cmd minfs
 	@cp -a ../buildscripts minfs
 	@cp -a ../Makefile minfs
-	@cp -a ../vendor minfs
 	@cp -a ../.git minfs
 	@echo "### docker build: rootfs image with minfs-docker-plugin"
-	@docker build --build-arg ARCH=${PLUGIN_ARCH} -t ${PLUGIN_NAME}:rootfs .
+	@docker build --build-arg ARCH=${PLUGIN_ARCH} -q -t ${PLUGIN_NAME}:rootfs .
 
 docker-release:
 	@echo "### docker build: builder image"

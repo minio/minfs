@@ -17,12 +17,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 
-	"github.com/sirupsen/logrus"
 	"github.com/docker/go-plugins-helpers/volume"
+	"github.com/sirupsen/logrus"
 )
 
 // return `Host` from the URL endpoint.
@@ -61,7 +62,7 @@ func getScheme(endpoint string) (string, error) {
 // If the requested volume alredy exists, then its necessary that the server configs (MinIO server endpoint,
 // bucket,accessKey and secretKey matches with the existing one.
 // Since a mount is uniquely identified by its volume name its not possible to have a duplicate entry.
-func matchServerConfig(config serverConfig, r volume.Request) error {
+func matchServerConfig(config serverConfig, r *volume.CreateRequest) error {
 	if r.Options == nil {
 		return fmt.Errorf("No options provided. Please refer example usage")
 	}
@@ -90,9 +91,9 @@ func matchServerConfig(config serverConfig, r volume.Request) error {
 }
 
 // Error repsonse to be sent to docker on failure of any operation.
-func errorResponse(err string) volume.Response {
+func errorResponse(err string) error {
 	logrus.Error(err)
-	return volume.Response{Err: err}
+	return errors.New(err)
 }
 
 // create directory for the given path.

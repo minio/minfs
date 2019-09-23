@@ -1,10 +1,11 @@
 ARG ARCH
-FROM ${ARCH}/golang:1.8-stretch
+FROM ${ARCH}/golang:1.13-stretch
 
-COPY . /go/src/github.com/minio/minfs-docker-plugin
-WORKDIR /go/src/github.com/minio/minfs-docker-plugin
+COPY . minfs-docker-plugin
+WORKDIR minfs-docker-plugin
 
 RUN set -ex \
-    && go install --ldflags '-extldflags "-static"'
+    && GO111MODULE=on go install --ldflags '-s -w' \
+    && mv -f /go/bin/docker-plugin /go/bin/minfs-docker-plugin
 
 CMD ["/go/bin/minfs-docker-plugin"]

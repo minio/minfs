@@ -17,13 +17,13 @@
 package minfs
 
 import (
+	"context"
 	"io"
 	"os"
 
-	"github.com/minio/minfs/meta"
-
 	"bazil.org/fuse"
-	"golang.org/x/net/context"
+
+	"github.com/minio/minfs/meta"
 )
 
 // FileHandle - Contains an opened file which can be read from and written to

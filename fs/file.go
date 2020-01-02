@@ -17,6 +17,7 @@
 package minfs
 
 import (
+	"context"
 	"crypto/sha256"
 	"io"
 	"os"
@@ -27,7 +28,6 @@ import (
 	"bazil.org/fuse/fs"
 	"github.com/minio/minfs/meta"
 	minio "github.com/minio/minio-go/v6"
-	"golang.org/x/net/context"
 )
 
 // File implements both Node and Handle for the hello file.

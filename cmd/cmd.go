@@ -24,7 +24,7 @@ import (
 	"strings"
 
 	"github.com/minio/cli"
-	"github.com/minio/mc/pkg/console"
+	"github.com/minio/minio/pkg/console"
 	minfs "github.com/minio/minfs/fs"
 )
 

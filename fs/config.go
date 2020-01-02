@@ -25,7 +25,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/minio/mc/pkg/console"
+	"github.com/minio/minio/pkg/console"
 )
 
 // Config is being used for storge of configuration items

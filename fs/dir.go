@@ -17,6 +17,7 @@
 package minfs
 
 import (
+	"context"
 	"os"
 	"path"
 	"strings"
@@ -24,9 +25,9 @@ import (
 
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
+
 	"github.com/minio/minfs/meta"
 	minio "github.com/minio/minio-go/v6"
-	"golang.org/x/net/context"
 )
 
 // Dir implements both Node and Handle for the root directory.

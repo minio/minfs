@@ -18,6 +18,7 @@
 package minfs
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
@@ -30,8 +31,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/minio/minfs/meta"
 	"github.com/minio/minio-go/v6"

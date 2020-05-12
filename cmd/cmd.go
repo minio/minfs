@@ -20,11 +20,11 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 
 	"github.com/minio/cli"
-	"github.com/minio/minio/pkg/console"
 	minfs "github.com/minio/minfs/fs"
 )
 
@@ -166,6 +166,6 @@ func Main(args []string) {
 
 	// Run the app - exit on error.
 	if err := app.Run(args); err != nil {
-		console.Fatalln(err)
+		log.Fatalln(err)
 	}
 }

@@ -20,12 +20,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"log"
 	"net/url"
 	"os"
 	"path"
 	"strings"
-
-	"github.com/minio/minio/pkg/console"
 )
 
 // Config is being used for storge of configuration items
@@ -65,7 +64,7 @@ func InitMinFSConfig() (*AccessConfig, error) {
 	// Config doesn't exist create it based on environment values.
 	if _, err := os.Stat(globalConfigFile); err != nil {
 		if os.IsNotExist(err) {
-			console.Println("Initializing config.json for the first time, please update your access credentials.")
+			log.Println("Initializing config.json for the first time, please update your access credentials.")
 			ac := &AccessConfig{
 				Version:     "1",
 				AccessKey:   os.Getenv("MINFS_ACCESS_KEY"),

@@ -6,6 +6,9 @@ MinFS helps legacy applications use modern object stores with minimal config cha
 
 > Be careful, it is always possible to remove boltdb cache. Cache will be recreated by MinFS synchronizing metadata from the server.
 
+# Architecture
+![architecture](https://raw.githubusercontent.com/minio/minfs/master/MinFS.svg?sanitize=true)
+
 ## POSIX Compatibility
 > MinFS is not a POSIX conformant filesystem and it does not intend to be one. MinFS is built for legacy applications that needs to access an object store but does not expect strict POSIX compatibility. Please use MinFS if this fits your needs.
 

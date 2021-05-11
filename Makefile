@@ -8,7 +8,6 @@ ifeq ($(GOOS),'darwin')
   GOOSALT = 'mac'
 endif
 
-
 BUILD_LDFLAGS := '$(LDFLAGS)'
 
 all: build
@@ -19,42 +18,17 @@ checks:
 
 getdeps:
 	@mkdir -p ${GOPATH}/bin
-	@which golint 1>/dev/null || (echo "Installing golint" && go get -u golang.org/x/lint/golint)
-	@which staticcheck 1>/dev/null || (echo "Installing staticcheck" && wget --quiet -O ${GOPATH}/bin/staticcheck https://github.com/dominikh/go-tools/releases/download/2019.1/staticcheck_linux_amd64 && chmod +x ${GOPATH}/bin/staticcheck)
-	@which misspell 1>/dev/null || (echo "Installing misspell" && wget --quiet https://github.com/client9/misspell/releases/download/v0.3.4/misspell_0.3.4_${GOOSALT}_64bit.tar.gz && tar xf misspell_0.3.4_${GOOSALT}_64bit.tar.gz && mv misspell ${GOPATH}/bin/misspell && chmod +x ${GOPATH}/bin/misspell && rm -f misspell_0.3.4_${GOOSALT}_64bit.tar.gz)
+	@which golangci-lint 1>/dev/null || (echo "Installing golangci-lint" && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin v1.27.0)
 
 crosscompile:
 	@(env bash $(PWD)/buildscripts/cross-compile.sh)
 
-verifiers: getdeps vet fmt lint staticcheck spelling
-
-vet:
-	@echo "Running $@"
-	@GO111MODULE=on go vet github.com/minio/minfs/...
-
-fmt:
-	@echo "Running $@"
-	@GO111MODULE=on gofmt -d cmd/
-	@GO111MODULE=on gofmt -d fs/
-	@GO111MODULE=on gofmt -d meta/
+verifiers: getdeps lint
 
 lint:
-	@echo "Running $@"
-	@GO111MODULE=on ${GOPATH}/bin/golint -set_exit_status github.com/minio/minfs/cmd/...
-	@GO111MODULE=on ${GOPATH}/bin/golint -set_exit_status github.com/minio/minfs/fs/...
-	@GO111MODULE=on ${GOPATH}/bin/golint -set_exit_status github.com/minio/minfs/meta/...
-
-staticcheck:
-	@echo "Running $@"
-        @GO111MODULE=on ${GOPATH}/bin/staticcheck github.com/minio/minfs/cmd/...
-        @GO111MODULE=on ${GOPATH}/bin/staticcheck github.com/minio/minfs/fs/...
-        @GO111MODULE=on ${GOPATH}/bin/staticcheck github.com/minio/minfs/meta/...
-
-spelling:
-        @GO111MODULE=on ${GOPATH}/bin/misspell -locale US -error `find cmd/`
-        @GO111MODULE=on ${GOPATH}/bin/misspell -locale US -error `find fs/`
-        @GO111MODULE=on ${GOPATH}/bin/misspell -locale US -error `find meta/`
-        @GO111MODULE=on ${GOPATH}/bin/misspell -locale US -error `find docs/`
+	@echo "Running $@ check"
+	@GO111MODULE=on ${GOPATH}/bin/golangci-lint cache clean
+	@GO111MODULE=on ${GOPATH}/bin/golangci-lint run --build-tags kqueue --timeout=10m --config ./.golangci.yml
 
 test: verifiers build
 	@echo "Running unit tests"
@@ -67,7 +41,7 @@ coverage: build
 # Builds mc locally.
 build: checks
 	@echo "Building minfs binary to './minfs'"
-	@GO111MODULE=on GO_FLAGS="" CGO_ENABLED=0 go build -tags kqueue --ldflags $(BUILD_LDFLAGS) -o $(PWD)/minfs
+	@GO111MODULE=on CGO_ENABLED=0 go build -tags kqueue --ldflags $(BUILD_LDFLAGS) -o $(PWD)/minfs
 
 # Builds MinFS and installs it to $GOPATH/bin.
 install: build

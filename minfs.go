@@ -24,6 +24,15 @@ import (
 )
 
 func main() {
+	app := minfs.NewApp()
+	if len(os.Args) == 1 || (len(os.Args) == 2 && (os.Args[1] == "--help" || os.Args[1] == "--version" ||
+		os.Args[1] == "-h" || os.Args[1] == "-v")) {
+		if err := app.Run(os.Args); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
 	dctx := &daemon.Context{
 		PidFileName: "/var/log/minfs.pid",
 		PidFilePerm: 0644,
@@ -44,5 +53,5 @@ func main() {
 	defer dctx.Release()
 
 	// daemon business logic starts here
-	minfs.Main(os.Args)
+	minfs.Main(app, os.Args)
 }

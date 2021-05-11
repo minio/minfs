@@ -57,40 +57,10 @@ FLAGS:
   {{range .Flags}}{{.}}
   {{end}}{{end}}
 VERSION:
-  ` + Version +
-	`{{ "\n"}}` +
-	`
-COMMITID:
-  ` + CommitID +
-	`{{ "\n"}}`
+  ` + Version + `{{ "\n"}}`
 
-// Main is the actual run function
-func Main(args []string) {
-	// Enable profiling supported modes are [cpu, mem, block].
-	/*
-		switch os.Getenv("MINFS_PROFILER") {
-		case "cpu":
-			defer profile.Start(profile.CPUProfile, profile.ProfilePath(mustGetProfileDir())).Stop()
-		case "mem":
-			defer profile.Start(profile.MemProfile, profile.ProfilePath(mustGetProfileDir())).Stop()
-		case "block":
-			defer profile.Start(profile.BlockProfile, profile.ProfilePath(mustGetProfileDir())).Stop()
-		}
-	*/
-
-	// Options:
-	// -- debug
-	// -- bucket
-	// -- target
-	// -- permissions
-	// -- uid / gid
-
-	// Set up app.
-	cli.HelpFlag = cli.BoolFlag{
-		Name:  "help, h",
-		Usage: "show help",
-	}
-
+// NewApp initializes CLI framework for minfs.
+func NewApp() *cli.App {
 	app := cli.NewApp()
 	app.HideHelpCommand = true
 	app.Name = "minfs"
@@ -101,8 +71,7 @@ func Main(args []string) {
 	app.Flags = append(minfsFlags, globalFlags...)
 	app.CustomAppHelpTemplate = minfsHelpTemplate
 	app.Before = func(c *cli.Context) error {
-		_, err := minfs.InitMinFSConfig()
-		if err != nil {
+		if _, err := minfs.InitMinFSConfig(); err != nil {
 			return fmt.Errorf("Unable to initialize minfs config %s", err)
 		}
 		if !c.Args().Present() {
@@ -162,6 +131,30 @@ func Main(args []string) {
 
 		return nil
 	}
+
+	return app
+}
+
+// Main is the actual run function
+func Main(app *cli.App, args []string) {
+	// Enable profiling supported modes are [cpu, mem, block].
+	/*
+		switch os.Getenv("MINFS_PROFILER") {
+		case "cpu":
+			defer profile.Start(profile.CPUProfile, profile.ProfilePath(mustGetProfileDir())).Stop()
+		case "mem":
+			defer profile.Start(profile.MemProfile, profile.ProfilePath(mustGetProfileDir())).Stop()
+		case "block":
+			defer profile.Start(profile.BlockProfile, profile.ProfilePath(mustGetProfileDir())).Stop()
+		}
+	*/
+
+	// Options:
+	// -- debug
+	// -- bucket
+	// -- target
+	// -- permissions
+	// -- uid / gid
 
 	// Run the app - exit on error.
 	if err := app.Run(args); err != nil {

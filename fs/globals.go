@@ -17,7 +17,6 @@ package minfs
 
 // Package cmd contains all the global variables and constants.
 const (
-	globalConfigDir  = "/etc/minfs"
 	globalConfigFile = "/etc/minfs/config.json"
 	globalDBDir      = "/etc/minfs/db"
 	globalLogFile    = "/var/log/minfs.log"

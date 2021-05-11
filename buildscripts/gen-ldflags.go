@@ -29,24 +29,24 @@ import (
 
 func genLDFlags(version string) string {
 	ldflagsStr := "-s -w"
-	ldflagsStr += " -X github.com/minio/minio/cmd.Version=" + version
-	ldflagsStr += " -X github.com/minio/minio/cmd.ReleaseTag=" + releaseTag(version)
-	ldflagsStr += " -X github.com/minio/minio/cmd.CommitID=" + commitID()
-	ldflagsStr += " -X github.com/minio/minio/cmd.ShortCommitID=" + commitID()[:12]
-	ldflagsStr += " -X github.com/minio/minio/cmd.GOPATH=" + os.Getenv("GOPATH")
-	ldflagsStr += " -X github.com/minio/minio/cmd.GOROOT=" + os.Getenv("GOROOT")
+	ldflagsStr += " -X github.com/minio/minfs/cmd.Version=" + version
+	ldflagsStr += " -X github.com/minio/minfs/cmd.ReleaseTag=" + releaseTag(version)
+	ldflagsStr += " -X github.com/minio/minfs/cmd.CommitID=" + commitID()
+	ldflagsStr += " -X github.com/minio/minfs/cmd.ShortCommitID=" + commitID()[:12]
+	ldflagsStr += " -X github.com/minio/minfs/cmd.GOPATH=" + os.Getenv("GOPATH")
+	ldflagsStr += " -X github.com/minio/minfs/cmd.GOROOT=" + os.Getenv("GOROOT")
 	return ldflagsStr
 }
 
 // genReleaseTag prints release tag to the console for easy git tagging.
 func releaseTag(version string) string {
 	relPrefix := "DEVELOPMENT"
-	if prefix := os.Getenv("MINIO_RELEASE"); prefix != "" {
+	if prefix := os.Getenv("MINFS_RELEASE"); prefix != "" {
 		relPrefix = prefix
 	}
 
 	relSuffix := ""
-	if hotfix := os.Getenv("MINIO_HOTFIX"); hotfix != "" {
+	if hotfix := os.Getenv("MINFS_HOTFIX"); hotfix != "" {
 		relSuffix = hotfix
 	}
 

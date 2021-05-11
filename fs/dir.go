@@ -26,7 +26,7 @@ import (
 	"bazil.org/fuse/fs"
 
 	"github.com/minio/minfs/meta"
-	minio "github.com/minio/minio-go/v6"
+	minio "github.com/minio/minio-go/v7"
 )
 
 // Dir implements both Node and Handle for the root directory.
@@ -249,32 +249,22 @@ func (dir *Dir) scan(ctx context.Context) error {
 		prefix = prefix + "/"
 	}
 
-	// The channel will abort the ListObjectsV2 request.
-	doneCh := make(chan struct{})
-	defer close(doneCh)
+	ch := dir.mfs.api.ListObjects(ctx, dir.mfs.config.bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: false,
+	})
 
-	ch := dir.mfs.api.ListObjectsV2(dir.mfs.config.bucket, prefix, false, doneCh)
+	for objInfo := range ch {
+		key := objInfo.Key[len(prefix):]
+		baseKey := path.Base(key)
 
-loop:
-	for {
-		select {
-		case <-ctx.Done():
-			break loop
-		case objInfo, ok := <-ch:
-			if !ok {
-				break loop
-			}
-			key := objInfo.Key[len(prefix):]
-			baseKey := path.Base(key)
+		// object still exists
+		objects[baseKey] = nil
 
-			// object still exists
-			objects[baseKey] = nil
-
-			if strings.HasSuffix(key, "/") {
-				dir.storeDir(b, tx, baseKey, objInfo)
-			} else {
-				dir.storeFile(b, tx, baseKey, objInfo)
-			}
+		if strings.HasSuffix(key, "/") {
+			dir.storeDir(b, tx, baseKey, objInfo)
+		} else {
+			dir.storeFile(b, tx, baseKey, objInfo)
 		}
 	}
 
@@ -408,7 +398,7 @@ func (dir *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 		b.DeleteBucket(req.Name + "/")
 	}
 
-	if err := dir.mfs.api.RemoveObject(dir.mfs.config.bucket, path.Join(dir.RemotePath(), req.Name)); err != nil {
+	if err := dir.mfs.api.RemoveObject(ctx, dir.mfs.config.bucket, path.Join(dir.RemotePath(), req.Name), minio.RemoveObjectOptions{}); err != nil {
 		return err
 	}
 
@@ -584,35 +574,26 @@ func (dir *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, nd fs.Node)
 
 		oldPath := path.Join(dir.RemotePath(), req.OldName)
 
-		doneCh := make(chan struct{})
-		defer close(doneCh)
+		ch := dir.mfs.api.ListObjects(ctx, dir.mfs.config.bucket, minio.ListObjectsOptions{
+			Prefix:    oldPath + "/",
+			Recursive: true,
+		})
 
-		ch := dir.mfs.api.ListObjectsV2(dir.mfs.config.bucket, oldPath+"/", true, doneCh)
-	loop:
-		for {
-			select {
-			case <-ctx.Done():
-				break loop
-			case message, ok := <-ch:
-				if !ok {
-					break loop
-				}
+		for message := range ch {
+			newPath := path.Join(newDir.RemotePath(), req.NewName, message.Key[len(oldPath):])
 
-				newPath := path.Join(newDir.RemotePath(), req.NewName, message.Key[len(oldPath):])
+			sr := newMoveOp(message.Key, newPath)
+			if err := dir.mfs.sync(&sr); err == nil {
+			} else if meta.IsNoSuchObject(err) {
+				return fuse.ENOENT
+			} else if err != nil {
+				return err
+			}
 
-				sr := newMoveOp(message.Key, newPath)
-				if err := dir.mfs.sync(&sr); err == nil {
-				} else if meta.IsNoSuchObject(err) {
-					return fuse.ENOENT
-				} else if err != nil {
-					return err
-				}
-
-				// we'll wait for the request to be uploaded and synced, before
-				// releasing the file
-				if err := <-sr.Error; err != nil {
-					return err
-				}
+			// we'll wait for the request to be uploaded and synced, before
+			// releasing the file
+			if err := <-sr.Error; err != nil {
+				return err
 			}
 		}
 	} else {

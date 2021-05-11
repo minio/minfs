@@ -1,6 +1,6 @@
 ### Install Golang
 
-If you do not have a working Golang environment setup please follow [Golang Installation Guide](https://docs.minio.io/docs/how-to-install-golang).
+If you do not have a working Golang environment setup please follow [Golang Installation Guide](https://docs.min.io/docs/how-to-install-golang).
 
 ### Setup your Minfs Github Repository
 Fork [MinIO upstream](https://github.com/minio/minfs/fork) source repository to your own personal repository. Copy the URL for minio from your personal github repo (you will need it for the `git clone` command below).

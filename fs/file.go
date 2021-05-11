@@ -26,7 +26,7 @@ import (
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
 	"github.com/minio/minfs/meta"
-	minio "github.com/minio/minio-go/v6"
+	minio "github.com/minio/minio-go/v7"
 )
 
 // File implements both Node and Handle for the hello file.
@@ -142,7 +142,7 @@ func (f *File) FullPath() string {
 
 // Saves a new file at cached path and fetches the object based on
 // the incoming fuse request.
-func (f *File) cacheSave(path string, req *fuse.OpenRequest) error {
+func (f *File) cacheSave(ctx context.Context, path string, req *fuse.OpenRequest) error {
 	file, err := os.Create(path)
 	if err != nil {
 		return err
@@ -154,7 +154,7 @@ func (f *File) cacheSave(path string, req *fuse.OpenRequest) error {
 		return nil
 	}
 
-	object, err := f.mfs.api.GetObject(f.mfs.config.bucket, f.RemotePath(), minio.GetObjectOptions{})
+	object, err := f.mfs.api.GetObject(ctx, f.mfs.config.bucket, f.RemotePath(), minio.GetObjectOptions{})
 	if err != nil {
 		if meta.IsNoSuchObject(err) {
 			return fuse.ENOENT
@@ -198,7 +198,7 @@ func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenR
 		return nil, err
 	}
 
-	err = f.cacheSave(cachePath, req)
+	err = f.cacheSave(ctx, cachePath, req)
 	if err != nil {
 		return nil, err
 	}

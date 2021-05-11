@@ -32,8 +32,8 @@ import (
 	"time"
 
 	"github.com/minio/minfs/meta"
-	"github.com/minio/minio-go/v6"
-	"github.com/minio/minio-go/v6/pkg/credentials"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
@@ -151,7 +151,6 @@ func (mfs *MinFS) Serve() (err error) {
 	go func() {
 		<-trapCh
 
-		//mfs.stopNotificationListener()
 		mfs.shutdown()
 	}()
 
@@ -181,12 +180,6 @@ func (mfs *MinFS) Serve() (err error) {
 		secure = mfs.config.target.Scheme == "https"
 	)
 
-	creds := credentials.NewStaticV4(access, secret, token)
-	mfs.api, err = minio.NewWithCredentials(host, creds, secure, "")
-	if err != nil {
-		return err
-	}
-
 	var transport http.RoundTripper = &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
@@ -209,25 +202,27 @@ func (mfs *MinFS) Serve() (err error) {
 		DisableCompression: true,
 	}
 
-	mfs.api.SetCustomTransport(transport)
+	creds := credentials.NewStaticV4(access, secret, token)
+	options := &minio.Options{
+		Creds:     creds,
+		Secure:    secure,
+		Transport: transport,
+	}
+
+	mfs.api, err = minio.New(host, options)
+	if err != nil {
+		return err
+	}
 
 	// Validate if the bucket is valid and accessible.
-	exists, err := mfs.api.BucketExists(mfs.config.bucket)
+	exists, err := mfs.api.BucketExists(context.Background(), mfs.config.bucket)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		mfs.log.Println("Bucket doesn't not exist... attempting to create")
-		if err = mfs.api.MakeBucket(mfs.config.bucket, ""); err != nil {
-			return err
-		}
+		mfs.log.Println("Bucket doesn't not exist... aborting")
+		return os.ErrNotExist
 	}
-
-	// Set notifications
-	// mfs.log.Println("Starting monitoring server...")
-	// if err = mfs.startNotificationListener(); err != nil {
-	//	return err
-	//	}
 
 	if err = mfs.startSync(); err != nil {
 		return err
@@ -255,35 +250,32 @@ func (mfs *MinFS) sync(req interface{}) error {
 }
 
 func (mfs *MinFS) moveOp(req *MoveOperation) {
-	src := minio.NewSourceInfo(mfs.config.bucket, req.Source, nil)
-	dst, err := minio.NewDestinationInfo(mfs.config.bucket, req.Target, nil, nil)
-	if err != nil {
+	dst := minio.CopyDestOptions{
+		Bucket: mfs.config.bucket,
+		Object: req.Target,
+	}
+	src := minio.CopySrcOptions{
+		Bucket: mfs.config.bucket,
+		Object: req.Source,
+	}
+	if _, err := mfs.api.CopyObject(context.Background(), dst, src); err != nil {
 		req.Error <- err
 		return
 	}
-	if err = mfs.api.CopyObject(dst, src); err != nil {
-		req.Error <- err
-		return
-	}
-	if err = mfs.api.RemoveObject(mfs.config.bucket, req.Source); err != nil {
-		req.Error <- err
-		return
-	}
-	req.Error <- nil
+	req.Error <- mfs.api.RemoveObject(context.Background(), mfs.config.bucket, req.Source, minio.RemoveObjectOptions{})
 }
 
 func (mfs *MinFS) copyOp(req *CopyOperation) {
-	src := minio.NewSourceInfo(mfs.config.bucket, req.Source, nil)
-	dst, err := minio.NewDestinationInfo(mfs.config.bucket, req.Target, nil, nil)
-	if err != nil {
-		req.Error <- err
-		return
+	dst := minio.CopyDestOptions{
+		Bucket: mfs.config.bucket,
+		Object: req.Target,
 	}
-	if err = mfs.api.CopyObject(dst, src); err != nil {
-		req.Error <- err
-		return
+	src := minio.CopySrcOptions{
+		Bucket: mfs.config.bucket,
+		Object: req.Source,
 	}
-	req.Error <- nil
+	_, err := mfs.api.CopyObject(context.Background(), dst, src)
+	req.Error <- err
 }
 
 func (mfs *MinFS) putOp(req *PutOperation) {
@@ -297,7 +289,7 @@ func (mfs *MinFS) putOp(req *PutOperation) {
 	ops := minio.PutObjectOptions{
 		ContentType: mime.TypeByExtension(filepath.Ext(req.Target)),
 	}
-	_, err = mfs.api.PutObject(mfs.config.bucket, req.Target, r, req.Length, ops)
+	_, err = mfs.api.PutObject(context.Background(), mfs.config.bucket, req.Target, r, req.Length, ops)
 	if err != nil {
 		req.Error <- err
 		return

@@ -16,6 +16,7 @@
 package minfs
 
 import (
+	"fmt"
 	"context"
 	"os"
 	"path"
@@ -81,6 +82,8 @@ func (dir *Dir) Attr(ctx context.Context, a *fuse.Attr) error {
 
 // Lookup returns the file node, and scans the current dir if necessary
 func (dir *Dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
+	fmt.Println ("Lookup()")
+
 	if err := dir.scan(ctx); err != nil {
 		return nil, err
 	}
@@ -219,9 +222,12 @@ func (dir *Dir) storeDir(bucket *meta.Bucket, tx *meta.Tx, baseKey string, objIn
 }
 
 func (dir *Dir) scan(ctx context.Context) error {
+	
 	if !dir.needsScan() {
 		return nil
 	}
+
+	fmt.Println("Scanning folder")
 
 	tx, err := dir.mfs.db.Begin(true)
 	if err != nil {
@@ -249,6 +255,8 @@ func (dir *Dir) scan(ctx context.Context) error {
 		prefix = prefix + "/"
 	}
 
+	fmt.Println("Listing Objects")
+
 	ch := dir.mfs.api.ListObjects(ctx, dir.mfs.config.bucket, minio.ListObjectsOptions{
 		Prefix:    prefix,
 		Recursive: false,
@@ -260,6 +268,8 @@ func (dir *Dir) scan(ctx context.Context) error {
 
 		// object still exists
 		objects[baseKey] = nil
+
+		fmt.Println("Found object:", key)
 
 		if strings.HasSuffix(key, "/") {
 			dir.storeDir(b, tx, baseKey, objInfo)
@@ -289,11 +299,18 @@ func (dir *Dir) scan(ctx context.Context) error {
 	}
 
 	dir.scanned = true
+
 	return nil
 }
 
 // ReadDirAll will return all files in current dir
 func (dir *Dir) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
+	fmt.Println("ReadDirAll()")
+
+	// Referesh every ReadDir
+	dir.scanned = false
+
+
 	if err := dir.scan(ctx); err != nil {
 		return nil, err
 	}

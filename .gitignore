@@ -7,3 +7,5 @@ experimental
 cache
 minfs
 coverage.txt
+db
+log

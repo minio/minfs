@@ -20,7 +20,6 @@ import (
 	"os"
 
 	minfs "github.com/minio/minfs/cmd"
-	daemon "github.com/sevlyar/go-daemon"
 )
 
 func main() {
@@ -33,25 +32,6 @@ func main() {
 		return
 	}
 
-	dctx := &daemon.Context{
-		PidFileName: "/var/log/minfs.pid",
-		PidFilePerm: 0644,
-		LogFileName: "/var/log/minfs.log",
-		LogFilePerm: 0640,
-		WorkDir:     "./",
-		Umask:       027,
-		Args:        os.Args,
-	}
-
-	d, err := dctx.Reborn()
-	if err != nil {
-		log.Fatalln("Unable to run: ", err)
-	}
-	if d != nil {
-		return
-	}
-	defer dctx.Release()
-
-	// daemon business logic starts here
+	// Run our app
 	minfs.Main(app, os.Args)
 }

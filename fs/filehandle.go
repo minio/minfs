@@ -86,7 +86,8 @@ func (fh *FileHandle) Release(ctx context.Context, req *fuse.ReleaseRequest) err
 
 	defer fh.f.mfs.Release(fh)
 
-	os.Remove(fh.cachePath)
+	// TODO: We were removing the cached file... we can be smarter about cache management...
+	// os.Remove(fh.cachePath)
 	return nil
 }
 

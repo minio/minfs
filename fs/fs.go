@@ -116,12 +116,8 @@ func New(options ...func(*Config)) (*MinFS, error) {
 func (mfs *MinFS) mount() (*fuse.Conn, error) {
 	return fuse.Mount(
 		mfs.config.mountpoint,
-		fuse.FSName("MinFS"),
-		fuse.Subtype("MinFS"),
-		fuse.LocalVolume(),
-		fuse.VolumeName(mfs.config.bucket),
-		fuse.AllowOther(),
-		fuse.DefaultPermissions(),
+		fuse.FSName("LunaFS"),
+		fuse.Subtype("LunaFS"),
 	)
 }
 
@@ -242,6 +238,7 @@ func (mfs *MinFS) Serve() (err error) {
 func (mfs *MinFS) shutdown() {
 	fuse.Unmount(mfs.config.mountpoint)
 	mfs.log.Println("MinFS stopped cleanly.")
+	fmt.Println("Stopped LunaFS gracefully, goodbye.")
 }
 
 func (mfs *MinFS) sync(req interface{}) error {

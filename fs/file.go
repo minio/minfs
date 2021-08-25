@@ -146,7 +146,7 @@ func (f *File) FullPath() string {
 func (f *File) cacheSave(ctx context.Context, path string, req *fuse.OpenRequest) error {
 
 	if _, err := os.Stat(path); err == nil {
-		fmt.Println("Already cached!!")
+		// fmt.Println("Already cached!!")
 		return err
 	}
 
@@ -187,11 +187,10 @@ func (f *File) cacheSave(ctx context.Context, path string, req *fuse.OpenRequest
 	return nil
 }
 
-// Saves a new file at cached path and fetches the object based on
-// the incoming fuse request.
+// Generates a cache path based on the minio MD5 checksum
 func (f *File) cacheAllocate(ctx context.Context) (string, error) {
 
-	fmt.Println ("Statting Object:", f.RemotePath())
+	// fmt.Println ("Statting Object:", f.RemotePath())
 	object, err := f.mfs.api.StatObject(ctx, f.mfs.config.bucket, f.RemotePath(), minio.GetObjectOptions{})
 	if err != nil {
 		if meta.IsNoSuchObject(err) {
@@ -201,14 +200,14 @@ func (f *File) cacheAllocate(ctx context.Context) (string, error) {
 	}
 	// Success.
 	// NewCachePath -
-	cachePath := path.Join(f.mfs.config.cache, object.ETag)
+	cachePath := path.Join(f.mfs.config.cache, object.ETag + ".fcache")
 
 	return cachePath, err
 }
 
 // Open return a file handle of the opened file
 func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (fs.Handle, error) {
-	fmt.Println("Open()")
+	// fmt.Println("Open()")
 
 	if err := f.dir.mfs.wait(f.Path); err != nil {
 		return nil, err
@@ -231,7 +230,7 @@ func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenR
 		return nil, err
 	}
 
-	fmt.Println("Caching at:", cachePath)
+	// fmt.Println("Caching at:", cachePath)
 	// fmt.Println("MD5 at:", md5Path)
 
 	err = f.cacheSave(ctx, cachePath, req)

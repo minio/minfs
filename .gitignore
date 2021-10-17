@@ -7,3 +7,4 @@ experimental
 cache
 minfs
 coverage.txt
+dist/

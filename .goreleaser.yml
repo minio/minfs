@@ -1,0 +1,69 @@
+# This is an example goreleaser.yaml file with some sane defaults.
+# Make sure to check the documentation at http://goreleaser.com
+project_name: minfs
+
+release:
+   name_template: "Release version {{.Tag}}"
+   github:
+    owner: minio
+    name: minfs
+
+before:
+  hooks:
+    # you may remove this if you don't use vgo
+    - go mod tidy
+
+builds:
+  -
+    goos:
+      - linux
+      - freebsd
+    goarch:
+      - amd64
+      - ppc64le
+      - s390x
+      - arm64
+
+    env:
+      - CGO_ENABLED=0
+
+    flags:
+      - -trimpath
+      - --tags=kqueue
+
+    ldflags:
+      - -s -w -X github.com/minio/minfs/cmd.ReleaseTag={{.Tag}} -X github.com/minio/minfs/cmd.CommitID={{.FullCommit}} -X github.com/minio/minfs/cmd.Version={{.Version}} -X github.com/minio/minfs/cmd.ShortCommitID={{.ShortCommit}}
+
+archives:
+  -
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    format: binary
+    replacements:
+      arm: arm
+
+snapshot:
+  name_template: v0.0.0@{{.ShortCommit}}
+
+changelog:
+  sort: asc
+
+nfpms:
+  -
+    vendor: MinIO, Inc.
+    homepage: https://github.com/minio/minfs
+    maintainer: MinIO Development <dev@min.io>
+    description: Fuse driver for Object Storage Server
+    license: GNU Affero General Public License v3.0
+    formats:
+      - deb
+      - rpm
+    bindir: /sbin
+    contents:
+      # Basic file that applies to all packagers
+      - src: docs/minfs.8
+        dst: /usr/share/man/man8/minfs.8
+      - src: docs/mount.minfs.8
+        dst: /usr/share/man/man8/mount.minfs.8
+      - src: mount.minfs
+        dst: /sbin/mount.minfs
+

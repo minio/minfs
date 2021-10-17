@@ -9,7 +9,6 @@ require (
 	github.com/gopherjs/gopherjs v0.0.0-20190328170749-bb2674552d8f // indirect
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/minio/cli v1.22.0
-	github.com/minio/minio-go/v6 v6.0.55
 	github.com/minio/minio-go/v7 v7.0.10
 	github.com/sevlyar/go-daemon v0.1.5
 	github.com/smartystreets/assertions v0.0.0-20190401211740-f487f9de1cd3 // indirect

@@ -23,8 +23,8 @@ import (
 
 	"gopkg.in/vmihailenco/msgpack.v2"
 
-	"github.com/coreos/bbolt"
 	minio "github.com/minio/minio-go/v7"
+	"go.etcd.io/bbolt"
 )
 
 // RegisterExt -
